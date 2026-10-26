@@ -111,6 +111,9 @@ textarea{min-height:56px;resize:vertical}
 .periodbar{display:flex;gap:10px;align-items:center;margin-top:4px}
 .periodbar label{font-size:.85rem;color:var(--muted);font-weight:600}
 .periodbar select{min-width:240px}
+.trend{margin-left:8px;font-size:.8rem;font-weight:700;white-space:nowrap}
+.trend.up{color:#5fc48a}.trend.down{color:var(--danger)}.trend.flat{color:var(--muted)}
+.trend.demo{opacity:.6;font-style:italic}
 #prodList .periodbar{flex-wrap:wrap}
 #prodList .periodbar select{min-width:0;max-width:220px}
 #prodList #prodDim{width:130px}
@@ -549,16 +552,56 @@ select.reason{font-size:.82rem;padding:4px 6px}
   function deliverySummary(cd){ const known = cd.filter(d => d.delivery !== "" && d.purpose !== "Επιστροφή"); const rows = countBy(known, deliveryLabel); return rows.map(([k,n], i) => `${i === 0 && rows.length > 1 ? "<b>Συνήθως:</b> " : ""}${esc(k)} <span class="num">×${n}${known.length ? " (" + Math.round(n*100/known.length) + "%)" : ""}</span>`).join("<br>"); }
   const tbl = (head, rows) => rows.length ? `<div class="tbox"><table><thead><tr>${head.map(h => `<th class="${h[1]||""}">${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>` : `<p class="hint">Δεν υπάρχουν ακόμα δεδομένα.</p>`;
 
-  let anaTab = "sum", anaPeriod = "all";
+  const ymd = t => `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
+  const curYM = () => ymd(new Date()).slice(0,7);
+  let anaTab = "sum", anaPeriod = "M" + curYM(), anaFrom = "", anaTo = "", prevStats = null;
   const anaSort = {};
   const MONTHS = ["Ιανουάριος","Φεβρουάριος","Μάρτιος","Απρίλιος","Μάιος","Ιούνιος","Ιούλιος","Αύγουστος","Σεπτέμβριος","Οκτώβριος","Νοέμβριος","Δεκέμβριος"];
-  const inPeriod = d => anaPeriod === "all" || (anaPeriod[0] === "Y" ? String(d.date||"").slice(0,4) === anaPeriod.slice(1) : String(d.date||"").slice(0,7) === anaPeriod.slice(1));
-  function withPeriod(fn){ const all = docs; docs = all.filter(inPeriod); try { return fn(); } finally { docs = all; } }
+  // Periods: "all", "Y2026", "M2026-10" or "R" (custom from–to). Each maps to an inclusive [from, to] date range.
+  function rangeOf(p){
+    if (p === "all") return null;
+    if (p[0] === "Y") return [p.slice(1) + "-01-01", p.slice(1) + "-12-31"];
+    if (p[0] === "M") { const [y, m] = p.slice(1).split("-").map(Number); return [p.slice(1) + "-01", ymd(new Date(y, m, 0))]; }
+    return [anaFrom || "0000-01-01", anaTo || "9999-12-31"];
+  }
+  // The period right before, of the same length: previous month, previous year, or the same number of days.
+  function prevPeriod(){
+    const p = anaPeriod;
+    if (p === "all") return null;
+    if (p[0] === "Y") return {r: rangeOf("Y" + (+p.slice(1) - 1)), label: "Έτος " + (+p.slice(1) - 1)};
+    if (p[0] === "M") { const [y, m] = p.slice(1).split("-").map(Number), d = new Date(y, m - 2, 1); return {r: rangeOf("M" + ymd(d).slice(0,7)), label: MONTHS[d.getMonth()] + " " + d.getFullYear()}; }
+    if (!anaFrom || !anaTo) return null;
+    const f = new Date(anaFrom + "T00:00"), days = Math.round((new Date(anaTo + "T00:00") - f) / 864e5) + 1;
+    const pt = new Date(f); pt.setDate(pt.getDate() - 1); const pf0 = new Date(pt); pf0.setDate(pf0.getDate() - days + 1);
+    return {r: [ymd(pf0), ymd(pt)], label: `${dt(ymd(pf0))} – ${dt(ymd(pt))}`};
+  }
+  const inRange = (d, r) => { const x = String(d.date || "").slice(0,10); return !r || (x >= r[0] && x <= r[1]); };
+  const inPeriod = d => inRange(d, rangeOf(anaPeriod));
+  function withRange(r, fn){ const all = docs; docs = all.filter(d => inRange(d, r)); try { return fn(); } finally { docs = all; } }
+  function withPeriod(fn){ return withRange(rangeOf(anaPeriod), fn); }
+  const periodLabel = () => anaPeriod === "all" ? "" : anaPeriod === "R" ? `${dt(anaFrom)} – ${dt(anaTo)}` : anaPeriod[0] === "Y" ? "Έτος " + anaPeriod.slice(1) : MONTHS[+anaPeriod.slice(6) - 1] + " " + anaPeriod.slice(1,5);
+  function sumStats(){
+    const {prods, totQ} = analysisData(), sales = docs.filter(d => d.purpose !== "Επιστροφή");
+    const net = sales.reduce((a,d)=>{ const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0);
+    return {active: new Set(sales.map(d => d.customerId)).size, orders: sales.length, qty: totQ, net, avg: sales.length ? net / sales.length : 0, prods: prods.length};
+  }
+  // Placeholder arrows shown until the previous period has data, so the layout can be judged.
+  const TREND_DEMO = {active:["up",8], orders:["up",12], qty:["down",5], net:["up",3], avg:["flat",0], prods:["down",10]};
+  function trend(k, cur){
+    if (anaPeriod === "all") return "";
+    let dir, p = null; const demo = !prevStats || !prevStats.orders;
+    if (demo) [dir, p] = TREND_DEMO[k];
+    else { const a = prevStats[k]; if (!a) dir = cur > 0 ? "up" : "flat"; else { const ch = (cur - a) / a * 100; dir = Math.abs(ch) < 0.5 ? "flat" : ch > 0 ? "up" : "down"; p = Math.abs(ch); } }
+    return `<span class="trend ${dir}${demo ? " demo" : ""}">${{up:"▲", down:"▼", flat:"–"}[dir]}${p != null && dir !== "flat" ? " " + Math.round(p) + "%" : ""}</span>`;
+  }
   function periodOptions(){
     const ym = [...new Set(docs.map(d => String(d.date||"").slice(0,7)).filter(x => /^\d{4}-\d{2}$/.test(x)))].sort().reverse();
+    if (!ym.includes(curYM())) ym.unshift(curYM());
+    if (anaPeriod[0] === "M" && !ym.includes(anaPeriod.slice(1))) ym.push(anaPeriod.slice(1));
+    ym.sort().reverse();
     const ys = [...new Set(ym.map(x => x.slice(0,4)))];
     const opt = (v,l) => `<option value="${v}" ${anaPeriod===v?"selected":""}>${l}</option>`;
-    return opt("all","Όλη η περίοδος") + ys.map(y => opt("Y"+y, "Έτος " + y) + ym.filter(m => m.startsWith(y)).map(m => opt("M"+m, "  " + MONTHS[+m.slice(5)-1] + " " + y)).join("")).join("");
+    return opt("all","Όλη η περίοδος") + opt("R","Συγκεκριμένη περίοδος…") + ys.map(y => opt("Y"+y, "Έτος " + y) + ym.filter(m => m.startsWith(y)).map(m => opt("M"+m, "  " + MONTHS[+m.slice(5)-1] + " " + y)).join("")).join("");
   }
   // Click-to-sort for analysis tables; numbers are read from Greek formatting (1.234,56 € / 14,9%).
   const cellVal = t => { const x = t.replace(/[€%\s]/g,"").replace(/\./g,"").replace(",","."); return /^[-+]?\d+(\.\d+)?$/.test(x) ? parseFloat(x) : null; };
@@ -581,7 +624,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   }
   function custValue(cid){ return docs.filter(d => d.customerId === cid && d.purpose !== "Επιστροφή").reduce((a,d) => { const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0); }
   let periodHTML = "";
-  function renderAnalysis(){ periodHTML = periodOptions(); withPeriod(renderAnalysisInner); applySorts($("anaList"), "ana-" + anaTab); }
+  function renderAnalysis(){ periodHTML = periodOptions(); const pp = prevPeriod(); prevStats = pp ? withRange(pp.r, sumStats) : null; prevStats && (prevStats.label = pp.label); withPeriod(renderAnalysisInner); applySorts($("anaList"), "ana-" + anaTab); }
   function renderAnalysisInner(){
     const {prods, totQ, totV} = analysisData();
     const sales = docs.filter(d => d.purpose !== "Επιστροφή");
@@ -591,7 +634,9 @@ select.reason{font-size:.82rem;padding:4px 6px}
       const netAll = sales.reduce((a,d)=>{ const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0);
       const topC = customers.map(c => ({c, v: custValue(c._id)})).sort((a,b)=>b.v-a.v).slice(0,5);
       const topP = prods.slice().sort((a,b)=>b.value-a.value).slice(0,5);
-      body = `<div class="info"><div><span>Πελάτες</span><b class="num">${customers.length}</b></div><div><span>Παραγγελίες</span><b class="num">${sales.length}</b></div><div><span>Τεμάχια</span><b class="num">${qn(totQ)}</b></div><div><span>Καθαρή αξία</span><b class="num">${eur(r2(netAll))}</b></div><div><span>Μέση παραγγελία</span><b class="num">${sales.length ? eur(r2(netAll/sales.length)) : "–"}</b></div><div><span>Διαφορετικά προϊόντα</span><b class="num">${prods.length}</b></div></div>
+      const cur = sumStats(), card = (label, val, k, extra) => `<div><span>${label}</span><b class="num">${val}</b>${extra || ""}${k ? trend(k, cur[k]) : ""}</div>`;
+      const cmp = anaPeriod === "all" ? "" : !prevStats || !prevStats.orders ? `<p class="hint">Τα βελάκια είναι προς το παρόν δείγμα: δεν υπάρχουν ακόμα στοιχεία για ${prevStats ? esc(prevStats.label) : "την προηγούμενη περίοδο"}.</p>` : `<p class="hint">Τα βελάκια συγκρίνουν με ${esc(prevStats.label)}.</p>`;
+      body = `<div class="info">${card("Πελάτες συνολικά", customers.length)}${card("Πελάτες με παραγγελία", cur.active, "active", ` <small class="hint">από ${customers.length}</small>`)}${card("Παραγγελίες", cur.orders, "orders")}${card("Τεμάχια", qn(cur.qty), "qty")}${card("Καθαρή αξία (χωρίς ΦΠΑ)", eur(r2(cur.net)), "net")}${card("Μέση παραγγελία", cur.orders ? eur(r2(cur.avg)) : "–", "avg")}${card("Διαφορετικά προϊόντα", cur.prods, "prods")}</div>${cmp}
         <h4>Οι 5 μεγαλύτεροι πελάτες (σε αξία)</h4>${tbl([["Πελάτης"],["Πόλη"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], topC.map(x => `<tr data-opencustana="${esc(x.c._id)}"><td>${nameCell(x.c)}</td><td>${esc(x.c.city)}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${pct(x.v,netAll)}</td></tr>`))}
         <h4>Τα 5 μεγαλύτερα προϊόντα (σε αξία)</h4>${tbl([["Κωδικός"],["Προϊόν"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], topP.map(p => `<tr><td class="num">${esc(p.code)}</td><td>${esc(p.name)}</td><td class="r num">${qn(p.qty)}</td><td class="r num">${eur(r2(p.value))}</td><td class="r num">${pct(p.value,totV)}</td></tr>`))}`;
     } else if (anaTab === "cust") {
@@ -613,12 +658,12 @@ select.reason{font-size:.82rem;padding:4px 6px}
     } else {
       body = `<p class="hint">Γραμμές όπου η χρέωση διαφέρει από την τιμή καταλόγου με την έκπτωση του πελάτη.</p>` + tbl([["Ημερομηνία"],["Πελάτης"],["Προϊόν"],["Χρεώθηκε","r"],["Αναμενόμενη","r"],["Διαφορά","r"],["Αιτία"]], deviations().map(x => `<tr><td class="num">${dt(x.d.date)}</td><td>${esc(x.c ? x.c.name : "")}</td><td>${esc(lineName(x.l))}</td><td class="r num">${eur(x.np)}</td><td class="r num">${eur(x.ex.net)}</td><td class="r num dev">${(x.np-x.ex.net>0?"+":"")}${eur(Math.round((x.np-x.ex.net)*1000)/1000)}</td><td><select class="reason" data-note="${esc(x.noteId)}" aria-label="Αιτία">${REASONS.map(r => `<option ${noteFor(x.noteId).reason===r?"selected":""} value="${esc(r)}">${r||"—"}</option>`).join("")}</select></td></tr>`));
     }
-    $("anaList").innerHTML = `<div class="periodbar"><label for="anaPeriod">Περίοδος</label><select id="anaPeriod">${periodHTML}</select></div><div class="tabs subtabs">${tabs.map(([k,l]) => `<button type="button" data-atab="${k}" aria-selected="${anaTab===k}">${l}</button>`).join("")}</div><div class="custbody">${body}</div>`;
+    $("anaList").innerHTML = `<div class="periodbar"><label for="anaPeriod">Περίοδος</label><select id="anaPeriod">${periodHTML}</select>${anaPeriod === "R" ? `<label for="anaFrom">Από</label><input type="date" id="anaFrom" value="${esc(anaFrom)}"><label for="anaTo">Έως</label><input type="date" id="anaTo" value="${esc(anaTo)}">` : ""}</div><div class="tabs subtabs">${tabs.map(([k,l]) => `<button type="button" data-atab="${k}" aria-selected="${anaTab===k}">${l}</button>`).join("")}</div><div class="custbody">${body}</div>`;
   }
   function openProdCust(k){ withPeriod(() => openProdCustInner(k)); applySorts($("listBody"), "prodcust"); }
   function openProdCustInner(k){
     const p = analysisData().prods.find(x => x.k === k); if (!p) return;
-    $("listTitle").textContent = p.name + (anaPeriod === "all" ? "" : " · " + $("anaPeriod").selectedOptions[0].textContent.trim());
+    $("listTitle").textContent = p.name + (anaPeriod === "all" ? "" : " · " + periodLabel());
     $("listBody").innerHTML = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Τιμή χωρίς ΦΠΑ","r"],["Με έκπτωση","r"],["Με ΦΠΑ","r"]], p.list.sort((a,b)=>b.s.qty-a.s.qty).map(({c,s}) => `<tr><td>${nameCell(c)}</td><td>${esc(c.city)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${eur(s.lastPrice)}${s.lastDisc ? ` <span class="hint">(−${qn(s.lastDisc)}%)</span>` : ""}</td><td class="r num">${s.lastPrice != null ? eur(r2(s.lastPrice*(1+s.lastVat/100))) : "–"}</td></tr>`));
     $("listSheet").hidden = false;
   }
@@ -1081,7 +1126,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const want = fold(catBuf), opt = [...e.target.options].find(o => o.value !== "all" && fold(o.value).startsWith(want));
     if (opt && opt.value !== pf[PSEL[id]]) { pf[PSEL[id]] = opt.value; render(); const sel = $(id); if (sel) sel.focus(); }
   });
-  document.addEventListener("change", e => { if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; render(); } if (PSEL[e.target.id]) { pf[PSEL[e.target.id]] = e.target.value; render(); } });
+  document.addEventListener("change", e => { if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; if (anaPeriod === "R" && !anaFrom) { const r = rangeOf("M" + curYM()); anaFrom = r[0]; anaTo = r[1]; } render(); } if (e.target.id === "anaFrom" || e.target.id === "anaTo") { if (e.target.id === "anaFrom") anaFrom = e.target.value; else anaTo = e.target.value; render(); } if (PSEL[e.target.id]) { pf[PSEL[e.target.id]] = e.target.value; render(); } });
   document.addEventListener("input", e => { if (e.target.id !== "prodDim") return; pf.dim = e.target.value; render(); const i = $("prodDim"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } });
   document.addEventListener("click", e => { if (e.target.id !== "prodClear") return; Object.assign(pf, {cat:"all", dim:"", shape:"all", thick:"all", mat:"all", paint:"all", feat:"all"}); render(); });
   document.addEventListener("click", e => {

@@ -126,6 +126,13 @@ textarea{min-height:56px;resize:vertical}
 .anasec{margin:34px 0 0}
 .anasec h4{margin:0 0 10px}
 .anasec table{width:100%}
+.scroll5{max-height:240px;overflow-y:auto}
+.scroll5 thead th{position:sticky;top:0;z-index:1;background:var(--surface);box-shadow:inset 0 -1px 0 var(--line)}
+.scroll5 tfoot td{position:sticky;bottom:0;background:var(--surface);font-weight:700;border-bottom:0;box-shadow:inset 0 1px 0 var(--line)}
+.scroll5 tbody{counter-reset:rn}
+.scroll5 tbody tr{counter-increment:rn}
+.scroll5 tbody td.rn::before{content:counter(rn)}
+.scroll5 th.rn,.scroll5 td.rn{width:1%;min-width:0;padding-right:12px;white-space:nowrap;color:var(--muted)}
 .custbody.sumwrap{background:none;border:0;padding:0;gap:20px}
 .sumwrap .sumcard,.sumwrap .anasec{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:0}
 .sumwrap .sumcard .info{margin:0}
@@ -583,7 +590,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     return [...m.values()].sort((a,b)=>b.n-a.n).map(x => `${esc(x.addr)}${x.city?", "+esc(x.city):""} <span class="num">×${x.n}</span><br><span class="hint">${[...x.ags.entries()].map(([a,n]) => esc(a)+" ×"+n).join(" · ")}</span>`).join("<br>");
   }
   function deliverySummary(cd){ const known = cd.filter(d => d.delivery !== "" && d.purpose !== "Επιστροφή"); const rows = countBy(known, deliveryLabel); return rows.map(([k,n], i) => `${i === 0 && rows.length > 1 ? "<b>Συνήθως:</b> " : ""}${esc(k)} <span class="num">×${n}${known.length ? " (" + Math.round(n*100/known.length) + "%)" : ""}</span>`).join("<br>"); }
-  const tbl = (head, rows) => rows.length ? `<div class="tbox"><table><thead><tr>${head.map(h => `<th class="${h[1]||""}">${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>` : `<p class="hint">Δεν υπάρχουν ακόμα δεδομένα.</p>`;
+  const tbl = (head, rows, foot, cls) => rows.length ? `<div class="tbox${cls ? " " + cls : ""}"><table><thead><tr>${head.map(h => `<th class="${h[1]||""}">${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody>${foot ? `<tfoot><tr>${foot}</tr></tfoot>` : ""}</table></div>` : `<p class="hint">Δεν υπάρχουν ακόμα δεδομένα.</p>`;
 
   const ymd = t => `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
   const curYM = () => ymd(new Date()).slice(0,7);
@@ -720,7 +727,10 @@ select.reason{font-size:.82rem;padding:4px 6px}
   function openProdCustInner(k){
     const p = analysisData().prods.find(x => x.k === k); if (!p) return;
     $("listTitle").textContent = p.name + (anaPeriod === "all" ? "" : " · " + periodLabel());
-    $("listBody").innerHTML = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Τιμή χωρίς ΦΠΑ","r"],["Έκπτωση","r"],["Με έκπτωση","r"],["Με ΦΠΑ","r"]], p.list.sort((a,b)=>b.s.qty-a.s.qty).map(({c,s}) => `<tr><td>${shortCell(c)}</td><td>${esc(c.city)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${s.lastDisc ? qn(s.lastDisc) + "%" : "–"}</td><td class="r num">${eur(s.lastPrice)}</td><td class="r num">${s.lastPrice != null ? eur(r2(s.lastPrice*(1+s.lastVat/100))) : "–"}</td></tr>`));
+    const L = p.list.sort((a,b)=>b.s.qty-a.s.qty), vatP = s => s.lastPrice != null ? r2(s.lastPrice*(1+s.lastVat/100)) : null;
+    const wavg = f => { let q = 0, v = 0; L.forEach(({s}) => { const x = f(s); if (x != null && s.qty) { q += s.qty; v += x*s.qty; } }); return q ? r2(v/q) : null; };
+    const foot = `<td class="rn"></td><td>Σύνολο · Μ.Ο.</td><td></td><td class="r num">${L.reduce((a,x)=>a+x.s.times,0)}</td><td class="r num">${qn(L.reduce((a,x)=>a+x.s.qty,0))}</td><td class="r num">${eur(wavg(s => s.lastList))}</td><td></td><td class="r num">${eur(wavg(s => s.lastPrice))}</td><td class="r num">${eur(wavg(vatP))}</td>`;
+    $("listBody").innerHTML = tbl([["#","r rn"],["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Τιμή χωρίς ΦΠΑ","r"],["Έκπτωση","r"],["Με έκπτωση","r"],["Με ΦΠΑ","r"]], L.map(({c,s}) => `<tr><td class="r num rn"></td><td>${shortCell(c)}</td><td>${esc(c.city)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${s.lastDisc ? qn(s.lastDisc) + "%" : "–"}</td><td class="r num">${eur(s.lastPrice)}</td><td class="r num">${eur(vatP(s))}</td></tr>`), foot, "scroll5");
     $("listSheet").hidden = false;
   }
   const shortOf = c => (c && (c.shortName || c.name)) || "";

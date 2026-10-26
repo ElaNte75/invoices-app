@@ -123,6 +123,7 @@ textarea{min-height:56px;resize:vertical}
 .periodbar.filters{margin-bottom:8px}
 .anasec{max-width:1150px;margin:34px auto 0}
 .anasec h4{margin:0 0 10px}
+.anasec table{width:100%}
 #anaList .info{max-width:1150px;margin:8px auto 0;gap:18px 24px}
 #anaList .info + p.hint{max-width:1150px;margin:12px auto 0}
 .periodbar.filters select{min-width:0;max-width:220px}
@@ -196,7 +197,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     <button role="tab" id="tabT" aria-selected="false" type="button" hidden>Εκκρεμότητες</button>
     <button role="tab" id="tabA" aria-selected="false" type="button">Ανάλυση</button>
   </div>
-  <input type="search" id="q" placeholder="Αναζήτηση επωνυμίας, ΑΦΜ, πόλης, προϊόντος…" aria-label="Αναζήτηση">
+  <input type="search" id="q" placeholder="Αναζήτηση επωνυμίας, συντομογραφίας, ΑΦΜ, πόλης, προϊόντος…" aria-label="Αναζήτηση">
   <div class="status" id="status"></div>
   <div class="loading" id="loading" role="status"><div class="ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="trk" cx="60" cy="60" r="52"/><circle class="bar" id="loadBar" cx="60" cy="60" r="52"/></svg><b id="loadPct">0%</b></div><span id="loadTxt">Φόρτωση δεδομένων…</span></div>
   <div class="empty" id="empty" hidden>
@@ -472,7 +473,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
 
 <script>
 (function(){
-  const CF = [["name","Επωνυμία",1],["tradeName","Διακριτικός τίτλος",1],["profession","Επάγγελμα",1],["activity","Δραστηριότητα (από καταλόγους)",1],["address","Διεύθυνση έδρας (χρέωσης)",1],["city","Πόλη έδρας"],["phone","Τηλέφωνο"],["afm","ΑΦΜ"],["doy","ΔΟΥ"],["website","Ιστοσελίδα"],["notes","Σημειώσεις / πηγές",1]];
+  const CF = [["name","Επωνυμία",1],["shortName","Συντομογραφία (πώς τον λέμε)"],["tradeName","Διακριτικός τίτλος",1],["profession","Επάγγελμα",1],["activity","Δραστηριότητα (από καταλόγους)",1],["address","Διεύθυνση έδρας (χρέωσης)",1],["city","Πόλη έδρας"],["phone","Τηλέφωνο"],["afm","ΑΦΜ"],["doy","ΔΟΥ"],["website","Ιστοσελίδα"],["notes","Σημειώσεις / πηγές",1]];
   const $ = id => document.getElementById(id);
   let db = null, customers = [], docs = [], tab = "C", editingDoc = null, editingCust = null, delArmed = false;
 
@@ -664,16 +665,16 @@ select.reason{font-size:.82rem;padding:4px 6px}
       const topP = prods.slice().sort((a,b)=>b.value-a.value).slice(0,5);
       const cur = sumStats(), card = (label, val, k, extra) => `<div><span>${label}</span><b class="num">${val}</b>${extra || ""}${k ? trend(k, cur[k]) : ""}</div>`;
       body = `<div class="info">${card("Πελάτες με παραγγελία", cur.active, "active")}${card("Παραγγελίες", cur.orders, "orders")}${card("Τεμάχια", qn(cur.qty), "qty")}${card("Καθαρή αξία (χωρίς ΦΠΑ)", eur(r2(cur.net)), "net")}${card("Μέση παραγγελία", cur.orders ? eur(r2(cur.avg)) : "–", "avg")}${card("Διαφορετικά προϊόντα", cur.prods, "prods")}</div>${cmp}
-        <div class="anasec"><h4>Οι 5 μεγαλύτεροι πελάτες (σε αξία)</h4>${tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], topC.map(x => `<tr data-opencustana="${esc(x.c._id)}"><td>${nameCell(x.c)}</td><td>${esc(x.c.city)}</td><td class="r num">${sales.filter(d => d.customerId === x.c._id).length}</td><td class="r num">${qn(statsFor(x.c._id).reduce((a,s)=>a+s.qty,0))}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${pct(x.v,netAll)}</td></tr>`))}</div>
+        <div class="anasec"><h4>Οι 5 μεγαλύτεροι πελάτες (σε αξία)</h4>${tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], topC.map(x => `<tr data-opencustana="${esc(x.c._id)}"><td>${shortCell(x.c)}</td><td>${esc(x.c.city)}</td><td class="r num">${sales.filter(d => d.customerId === x.c._id).length}</td><td class="r num">${qn(statsFor(x.c._id).reduce((a,s)=>a+s.qty,0))}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${pct(x.v,netAll)}</td></tr>`))}</div>
         <div class="anasec"><h4>Τα 5 μεγαλύτερα προϊόντα (σε αξία)</h4>${tbl([["Κατηγορία"],["Κωδικός"],["Περιγραφή"],["Σχήμα"],["Υλικό"],["Πάχος (χιλ.)","r"],["Ιδιαιτερότητες"],["Βαφή"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], topP.map(p => { const cp = p.k.startsWith("id:") ? catalog.find(x => x._id === p.k.slice(3)) : null, r = prodCols(cp || {description: p.name}, p.cat); return `<tr data-prodcust="${esc(p.k)}"><td>${esc(r.cat)}</td><td class="num">${esc(p.code)}</td><td>${esc(r.desc || p.name)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td class="r num">${esc(r.thick)}</td><td>${esc(r.extras.join(", "))}</td><td>${esc(r.paint)}</td><td class="r num">${qn(p.qty)}</td><td class="r num">${eur(r2(p.value))}</td><td class="r num">${pct(p.value,totV)}</td></tr>`; }))}</div>`;
     } else if (anaTab === "cust") {
       const custRows = () => { const sl = docs.filter(d => d.purpose !== "Επιστροφή"); return customers.map(c => { const n = sl.filter(d => d.customerId === c._id).length, v = custValue(c._id), q = statsFor(c._id).reduce((a,s)=>a+s.qty,0); return {c, n, v, q, avg: n ? v / n : 0}; }); };
       const rows = custRows().sort((a,b)=>b.v-a.v), tot = rows.reduce((a,x)=>a+x.v,0);
       const prevR = atPrev(custRows) || [], prevTot = prevR.reduce((a,x)=>a+x.v,0), pm = new Map(prevR.map(x => [x.c._id, x]));
       const T = (x, f, cur) => cmpTrend(cur, f(pm.get(x.c._id) || {n:0, v:0, q:0, avg:0}), x.c._id + f);
-      body = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["Μέση παραγγελία","r"],["% πωλήσεων","r"]], rows.map(x => `<tr data-opencustana="${esc(x.c._id)}"><td>${nameCell(x.c)}</td><td>${esc(x.c.city)}</td><td class="r num">${x.n}${T(x, y => y.n, x.n)}</td><td class="r num">${qn(x.q)}${T(x, y => y.q, x.q)}</td><td class="r num">${eur(r2(x.v))}${T(x, y => y.v, x.v)}</td><td class="r num">${x.n ? eur(r2(x.avg)) : "–"}${T(x, y => y.avg, x.avg)}</td><td class="r num">${pct(x.v,tot)}${T(x, y => prevTot ? y.v / prevTot : 0, tot ? x.v / tot : 0)}</td></tr>`));
+      body = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["Μέση παραγγελία","r"],["% πωλήσεων","r"]], rows.map(x => `<tr data-opencustana="${esc(x.c._id)}"><td>${shortCell(x.c)}</td><td>${esc(x.c.city)}</td><td class="r num">${x.n}${T(x, y => y.n, x.n)}</td><td class="r num">${qn(x.q)}${T(x, y => y.q, x.q)}</td><td class="r num">${eur(r2(x.v))}${T(x, y => y.v, x.v)}</td><td class="r num">${x.n ? eur(r2(x.avg)) : "–"}${T(x, y => y.avg, x.avg)}</td><td class="r num">${pct(x.v,tot)}${T(x, y => prevTot ? y.v / prevTot : 0, tot ? x.v / tot : 0)}</td></tr>`));
     } else if (anaTab === "city") {
-      const m = new Map(); customers.forEach(c => { const k = (c.city||"").trim() || "Χωρίς πόλη"; const x = m.get(k) || {n:0, v:0, names:[]}; x.n++; x.v += custValue(c._id); x.names.push(c.name); m.set(k, x); });
+      const m = new Map(); customers.forEach(c => { const k = (c.city||"").trim() || "Χωρίς πόλη"; const x = m.get(k) || {n:0, v:0, names:[]}; x.n++; x.v += custValue(c._id); x.names.push(shortOf(c)); m.set(k, x); });
       const tot = [...m.values()].reduce((a,x)=>a+x.v,0);
       body = tbl([["Πόλη"],["Πελάτες","r"],["% πελατών","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"],["Ποιοι"]], [...m.entries()].sort((a,b)=>b[1].v-a[1].v).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}</td><td class="r num">${pct(x.n,customers.length)}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${pct(x.v,tot)}</td><td>${esc(x.names.join(", "))}</td></tr>`));
     } else if (anaTab === "ship") {
@@ -700,10 +701,12 @@ select.reason{font-size:.82rem;padding:4px 6px}
   function openProdCustInner(k){
     const p = analysisData().prods.find(x => x.k === k); if (!p) return;
     $("listTitle").textContent = p.name + (anaPeriod === "all" ? "" : " · " + periodLabel());
-    $("listBody").innerHTML = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Τιμή χωρίς ΦΠΑ","r"],["Με έκπτωση","r"],["Με ΦΠΑ","r"]], p.list.sort((a,b)=>b.s.qty-a.s.qty).map(({c,s}) => `<tr><td>${nameCell(c)}</td><td>${esc(c.city)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${eur(s.lastPrice)}${s.lastDisc ? ` <span class="hint">(−${qn(s.lastDisc)}%)</span>` : ""}</td><td class="r num">${s.lastPrice != null ? eur(r2(s.lastPrice*(1+s.lastVat/100))) : "–"}</td></tr>`));
+    $("listBody").innerHTML = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Τιμή χωρίς ΦΠΑ","r"],["Με έκπτωση","r"],["Με ΦΠΑ","r"]], p.list.sort((a,b)=>b.s.qty-a.s.qty).map(({c,s}) => `<tr><td>${shortCell(c)}</td><td>${esc(c.city)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${eur(s.lastPrice)}${s.lastDisc ? ` <span class="hint">(−${qn(s.lastDisc)}%)</span>` : ""}</td><td class="r num">${s.lastPrice != null ? eur(r2(s.lastPrice*(1+s.lastVat/100))) : "–"}</td></tr>`));
     $("listSheet").hidden = false;
   }
-  const nameCell = c => `<b>${esc(c.name)}</b>${c.tradeName ? ` <span class="hint">(${esc(c.tradeName)})</span>` : ""}`;
+  const shortOf = c => (c && (c.shortName || c.name)) || "";
+  const nameCell = c => c.shortName ? `<b>${esc(c.shortName)}</b><div class="hint">${esc(c.name)}${c.tradeName ? ` (${esc(c.tradeName)})` : ""}</div>` : `<b>${esc(c.name)}</b>${c.tradeName ? ` <span class="hint">(${esc(c.tradeName)})</span>` : ""}`;
+  const shortCell = c => `<b title="${esc(c.name)}">${esc(shortOf(c))}</b>`;
   function usage(){
     const u = new Map();
     docs.forEach(d => { const ret = d.purpose === "Επιστροφή"; lines(d).forEach(l => {
@@ -942,7 +945,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   function docTable(list, withCustomer){
     const rows = list.slice().sort((a,b) => String(b.date||"").localeCompare(String(a.date||"")) || String(b.number||"").localeCompare(String(a.number||""), "el", {numeric:true})).map(d => {
       const c = custOf(d.customerId) || {}, t = docTotals(d), ret = d.purpose === "Επιστροφή";
-      return `<tr data-view="${esc(d._id)}"><td class="num">${dt(d.date)}${ret ? ' <span class="badge ret">Επιστροφή</span>' : ""}</td>${withCustomer ? `<td>${esc(c.name)}</td><td>${esc(d.deliveryCity || c.city)}</td>` : ""}<td>${esc(deliveryLabel(d))}</td><td class="r num">${qn(t.qty)}</td><td class="r num">${t.priced ? eur(t.net) : "–"}</td><td class="r num"><b>${t.priced ? eur(t.pay) : "–"}</b></td></tr>`; });
+      return `<tr data-view="${esc(d._id)}"><td class="num">${dt(d.date)}${ret ? ' <span class="badge ret">Επιστροφή</span>' : ""}</td>${withCustomer ? `<td title="${esc(c.name)}">${esc(shortOf(c))}</td><td>${esc(d.deliveryCity || c.city)}</td>` : ""}<td>${esc(deliveryLabel(d))}</td><td class="r num">${qn(t.qty)}</td><td class="r num">${t.priced ? eur(t.net) : "–"}</td><td class="r num"><b>${t.priced ? eur(t.pay) : "–"}</b></td></tr>`; });
     return rows.length ? `<div class="tbox"><table class="dtable"><thead><tr><th>Ημερομηνία</th>${withCustomer ? "<th>Πελάτης</th><th>Πόλη</th>" : ""}<th>Αποστολή</th><th class="r">Τεμάχια</th><th class="r">Καθαρή αξία</th><th class="r">Πληρωτέο</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>` : `<p class="hint">Δεν υπάρχουν παραστατικά.</p>`;
   }
   function custAgents(cid){
@@ -962,7 +965,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   }
   let viewing = null;
   function openView(id){ viewing = docs.find(x => x._id === id); if (!viewing) return; $("viewBody").innerHTML = invoiceHTML(viewing); $("viewSheet").hidden = false; }
-  function openCustDocs(cid){ const c = custOf(cid) || {}; $("listTitle").textContent = "Παραστατικά · " + (c.name || ""); $("listBody").innerHTML = docTable(docs.filter(d => d.customerId === cid), false); $("listSheet").hidden = false; }
+  function openCustDocs(cid){ const c = custOf(cid) || {}; $("listTitle").textContent = "Παραστατικά · " + shortOf(c); $("listBody").innerHTML = docTable(docs.filter(d => d.customerId === cid), false); $("listSheet").hidden = false; }
   $("listClose").onclick = () => { $("listSheet").hidden = true; };
   $("viewClose").onclick = () => { $("viewSheet").hidden = true; };
   $("viewPrint").onclick = async () => {
@@ -977,7 +980,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
 
   let selCust = null, custTab = "info";
   function custListHTML(q){
-    const rows = customers.slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"el"))
+    const rows = customers.slice().sort((a,b)=>shortOf(a).localeCompare(shortOf(b),"el"))
       .filter(c => !q || CF.some(([k]) => key(c[k]).includes(q)) || docs.some(d => d.customerId === c._id && (key(d.deliveryCity).includes(q) || lines(d).some(l => key(l.product).includes(q) || key(lineName(l)).includes(q)))))
       .map(c => { const cd = docs.filter(d => d.customerId === c._id && d.purpose !== "Επιστροφή"); const usual = countBy(cd.filter(d => d.delivery !== ""), deliveryLabel)[0];
         return `<tr data-opencust="${esc(c._id)}"><td>${nameCell(c)}</td><td>${esc(c.city)}</td><td class="num">${esc(c.phone)}</td><td class="num">${esc(c.afm)}</td><td>${usual ? esc(usual[0]) : "–"}</td><td class="r num">${cd.length}</td></tr>`; });
@@ -1004,7 +1007,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const tabs = [["info","Στοιχεία"],["prod",`Προϊόντα (${st.length})`],["docs",`Παραστατικά (${cd.length})`],["ana","Ανάλυση"]];
     const field = (l, v, cls) => `<div><span>${l}</span><div class="${cls||""}">${v ? esc(v) : "–"}</div></div>`;
     let body = "";
-    if (custTab === "info") body = `<h4>Στοιχεία χρέωσης</h4><div class="info">${field("Επωνυμία", c.name)}${field("Διακριτικός τίτλος", c.tradeName)}${field("ΑΦΜ", c.afm, "num")}${field("ΔΟΥ", c.doy)}${field("Διεύθυνση έδρας", c.address)}${field("Πόλη", c.city)}${field("Τηλέφωνο", c.phone, "num")}${field("Επάγγελμα", c.profession)}${field("Δραστηριότητα", c.activity)}${field("Ιστοσελίδα", c.website)}${field("Βασική έκπτωση", num(c.baseDiscount) != null ? qn(num(c.baseDiscount)) + "%" : "")}</div>
+    if (custTab === "info") body = `<h4>Στοιχεία χρέωσης</h4><div class="info">${field("Επωνυμία", c.name)}${field("Συντομογραφία", c.shortName)}${field("Διακριτικός τίτλος", c.tradeName)}${field("ΑΦΜ", c.afm, "num")}${field("ΔΟΥ", c.doy)}${field("Διεύθυνση έδρας", c.address)}${field("Πόλη", c.city)}${field("Τηλέφωνο", c.phone, "num")}${field("Επάγγελμα", c.profession)}${field("Δραστηριότητα", c.activity)}${field("Ιστοσελίδα", c.website)}${field("Βασική έκπτωση", num(c.baseDiscount) != null ? qn(num(c.baseDiscount)) + "%" : "")}</div>
       <h4>Παράδοση και πρακτορεία</h4><div class="info"><div><span>Σημεία παράδοσης</span>${deliveryPoints(cd) || "–"}</div><div><span>Τρόπος / πρακτορείο</span>${deliverySummary(cd) || "–"}</div></div>
       ${(c.agreements||[]).length ? `<h4>Ειδικές συμφωνίες</h4>${tbl([["Για"],["Τιμή","r"],["Έκπτ.","r"],["Min","r"],["Ισχύς"],["Κατάσταση"],["Σημ."]], c.agreements.map(a => `<tr><td>${esc(a.target)}</td><td class="r num">${eur(num(a.price))}</td><td class="r num">${num(a.discount)!=null?qn(num(a.discount))+"%":"–"}</td><td class="r num">${num(a.minQty)!=null?qn(num(a.minQty)):"–"}</td><td class="num">${dt(a.from)} – ${a.to?dt(a.to):"…"}</td><td>${esc(a.status||"Ενεργή")}</td><td>${esc(a.notes)}</td></tr>`))}` : ""}
       ${c.notes ? `<h4>Σημειώσεις / πηγές</h4><p class="hint">${esc(c.notes)}</p>` : ""}
@@ -1014,7 +1017,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     else if (custTab === "ana") body = custAnalysis(c, st, cd);
     else body = iss.length ? iss.map(x => `<h4>${esc(x.title)}</h4>${x.items.map(issueHTML).join("")}`).join("") : `<p class="hint">Δεν εκκρεμεί τίποτα για αυτόν τον πελάτη.</p>`;
     return `<div><button type="button" class="link" id="backCust">← Όλοι οι πελάτες</button></div>
-      <div class="custhead"><div><h2>${esc(c.name)}</h2><div class="meta">${c.tradeName?`<span>${esc(c.tradeName)}</span>`:""}<span>${esc(c.city)}</span>${c.phone?`<span class="num">Τηλ. ${esc(c.phone)}</span>`:""}${c.afm?`<span class="num">ΑΦΜ ${esc(c.afm)}</span>`:""}</div></div></div>
+      <div class="custhead"><div><h2>${esc(shortOf(c))}</h2><div class="meta">${c.shortName?`<span>${esc(c.name)}</span>`:""}${c.tradeName?`<span>${esc(c.tradeName)}</span>`:""}<span>${esc(c.city)}</span>${c.phone?`<span class="num">Τηλ. ${esc(c.phone)}</span>`:""}${c.afm?`<span class="num">ΑΦΜ ${esc(c.afm)}</span>`:""}</div></div></div>
       <div class="tabs subtabs">${tabs.map(([k,l]) => `<button type="button" data-ctab="${k}" aria-selected="${custTab===k}">${l}</button>`).join("")}</div>
       <div class="custbody">${body}</div>`;
   }
@@ -1037,7 +1040,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     $("prodNames").innerHTML = [...new Set(docs.flatMap(d => lines(d).map(l => (l.product||"").trim())).filter(Boolean))].sort().map(p => `<option value="${esc(p)}">`).join("");
 
     $("custList").innerHTML = selCust && custOf(selCust) ? custDetail(custOf(selCust)) : custListHTML(q);
-    $("docList").innerHTML = docTable(docs.filter(d => { const c = custOf(d.customerId) || {}; return !q || key(c.name).includes(q) || key(c.afm).includes(q) || key(c.city).includes(q) || key(d.number).includes(q) || lines(d).some(l => key(l.product).includes(q) || key(lineName(l)).includes(q)); }), true);
+    $("docList").innerHTML = docTable(docs.filter(d => { const c = custOf(d.customerId) || {}; return !q || key(c.name).includes(q) || key(c.shortName).includes(q) || key(c.afm).includes(q) || key(c.city).includes(q) || key(d.number).includes(q) || lines(d).some(l => key(l.product).includes(q) || key(lineName(l)).includes(q)); }), true);
   }
 
   // ----- customer fields -----
@@ -1062,7 +1065,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     $("d_purpose").value = d.purpose || "Πώληση"; $("d_related").value = d.related || ""; $("d_mark").value = d.mark || ""; $("d_vatRate").value = d.vatRate != null ? d.vatRate : "";
     $("d_delivery").value = d.delivery || (d.delivery === "" ? "" : "Από εμάς"); $("d_agent").value = d.agent || ""; $("agentWrap").hidden = $("d_delivery").value !== "Πρακτορείο";
     $("d_customer").innerHTML = `<option value="">— Επίλεξε πελάτη —</option><option value="__new">+ Νέος πελάτης</option>` +
-      customers.slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"el")).map(c => `<option value="${esc(c._id)}">${esc(c.name)}${c.afm?" · "+esc(c.afm):""}</option>`).join("");
+      customers.slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"el")).map(c => `<option value="${esc(c._id)}">${c.shortName?esc(c.shortName)+" — ":""}${esc(c.name)}${c.afm?" · "+esc(c.afm):""}</option>`).join("");
     $("d_customer").value = d.customerId || "";
     CF.forEach(([k]) => $("n_"+k).value = "");
     $("newCust").hidden = $("d_customer").value !== "__new";

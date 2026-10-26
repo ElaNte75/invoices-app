@@ -114,7 +114,9 @@ textarea{min-height:56px;resize:vertical}
 .trend{margin-left:8px;font-size:.8rem;font-weight:700;white-space:nowrap}
 .trend.up{color:#5fc48a}.trend.down{color:var(--danger)}.trend.flat{color:var(--muted)}
 .trend.demo{opacity:.6;font-style:italic}
-#prodList .periodbar{flex-wrap:wrap}
+#prodList .periodbar,.periodbar.filters{flex-wrap:wrap}
+.periodbar.filters{margin-bottom:8px}
+.periodbar.filters select{min-width:0;max-width:220px}
 #prodList .periodbar select{min-width:0;max-width:220px}
 #prodList #prodDim{width:130px}
 table.sortable th{cursor:pointer;user-select:none}
@@ -554,6 +556,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
 
   const ymd = t => `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
   const curYM = () => ymd(new Date()).slice(0,7);
+  const af = {cat:"all", shape:"all", mat:"all", feat:"all", paint:"all"}, ASEL = {aCat:"cat", aShape:"shape", aMat:"mat", aFeat:"feat", aPaint:"paint"};
   let anaTab = "sum", anaPeriod = "M" + curYM(), anaFrom = "", anaTo = "", prevStats = null;
   const anaSort = {};
   const MONTHS = ["Ιανουάριος","Φεβρουάριος","Μάρτιος","Απρίλιος","Μάιος","Ιούνιος","Ιούλιος","Αύγουστος","Σεπτέμβριος","Οκτώβριος","Νοέμβριος","Δεκέμβριος"];
@@ -628,7 +631,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   function renderAnalysisInner(){
     const {prods, totQ, totV} = analysisData();
     const sales = docs.filter(d => d.purpose !== "Επιστροφή");
-    const tabs = [["sum","Σύνοψη"],["cust","Πελάτες"],["city","Πόλεις"],["ship","Αποστολές"],["cat","Κατηγορίες"],["prod","Προϊόντα"],["dev","Αποκλίσεις τιμών"]];
+    const tabs = [["sum","Μηνιαία εικόνα"],["cust","Ανάλυση ανά πελάτη"],["city","Πόλεις"],["ship","Αποστολές"],["prod","Προϊόντα"],["dev","Αποκλίσεις τιμών"]];
     let body = "";
     if (anaTab === "sum") {
       const netAll = sales.reduce((a,d)=>{ const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0);
@@ -650,11 +653,15 @@ select.reason{font-size:.82rem;padding:4px 6px}
     } else if (anaTab === "ship") {
       const m = new Map(); sales.forEach(d => { const k = d.delivery === "" ? "Προς συμπλήρωση" : deliveryLabel(d); const x = m.get(k) || {n:0, cust:new Set(), cities:new Set()}; x.n++; x.cust.add(d.customerId); if (d.deliveryCity) x.cities.add(d.deliveryCity); m.set(k, x); });
       body = tbl([["Αποστολή"],["Παραγγελίες","r"],["% παραγγελιών","r"],["Πελάτες","r"],["Προορισμοί"]], [...m.entries()].sort((a,b)=>b[1].n-a[1].n).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}</td><td class="r num">${pct(x.n,sales.length)}</td><td class="r num">${x.cust.size}</td><td>${esc([...x.cities].join(", "))}</td></tr>`));
-    } else if (anaTab === "cat") {
-      const m = new Map(); prods.forEach(p => { const x = m.get(p.cat) || {n:0, q:0, v:0, cust:new Set()}; x.n++; x.q += p.qty; x.v += p.value; p.list.forEach(y => x.cust.add(y.c._id)); m.set(p.cat, x); });
-      body = tbl([["Κατηγορία"],["Προϊόντα","r"],["Τεμάχια","r"],["% τεμαχίων","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"],["Πελάτες","r"]], [...m.entries()].sort((a,b)=>b[1].v-a[1].v).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}</td><td class="r num">${qn(x.q)}</td><td class="r num">${pct(x.q,totQ)}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${pct(x.v,totV)}</td><td class="r num">${x.cust.size}</td></tr>`));
     } else if (anaTab === "prod") {
-      body = `<p class="hint">Πάτα ένα προϊόν για να δεις ποιοι πελάτες το παίρνουν και σε τι τιμή.</p>` + tbl([["Κωδικός"],["Προϊόν"],["Κατηγορία"],["Πελάτες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], prods.slice().sort((a,b)=>b.value-a.value).map(p => `<tr data-prodcust="${esc(p.k)}"><td class="num">${esc(p.code)}</td><td>${esc(p.name)}</td><td>${esc(p.cat)}</td><td class="r num">${p.list.length}</td><td class="r num">${qn(p.qty)}</td><td class="r num">${eur(r2(p.value))}</td><td class="r num">${pct(p.value,totV)}</td></tr>`));
+      // Same faceted filters as the catalog: each list offers only values present among the other filters' matches.
+      const rows = prods.map(p => { const cp = p.k.startsWith("id:") ? catalog.find(x => x._id === p.k.slice(3)) : null; return Object.assign({p}, prodCols(cp || {description: p.name}, p.cat)); });
+      const val = (r, f) => f === "feat" ? r.extras : [f === "shape" ? r.shapeF : f === "paint" ? r.paintF : r[f]];
+      const ok = (r, skip) => Object.keys(af).every(f => f === skip || af[f] === "all" || val(r, f).includes(af[f]));
+      const aopt = f => { const c = countBy(rows.filter(r => ok(r, f)).flatMap(r => val(r, f)), v => v).sort((x,y) => x[0].localeCompare(y[0], "el")); if (af[f] !== "all" && !c.some(([v]) => v === af[f])) c.push([af[f], 0]); return c.map(([v,n]) => `<option value="${esc(v)}" ${af[f]===v?"selected":""}>${esc(v)} (${n})</option>`).join(""); };
+      const asel = (id, f, label, all) => `<label for="${id}">${label}</label><select id="${id}"><option value="all">${all}</option>${aopt(f)}</select>`;
+      const list = rows.filter(r => ok(r)).sort((a,b) => b.p.value - a.p.value), lq = list.reduce((n,r) => n + r.p.qty, 0), lv = list.reduce((n,r) => n + r.p.value, 0);
+      body = `<div class="periodbar filters">${asel("aCat","cat","Κατηγορία","Όλες")}${asel("aShape","shape","Σχήμα","Όλα")}${asel("aMat","mat","Υλικό","Όλα")}${asel("aFeat","feat","Ιδιαιτερότητα","Όλες")}${asel("aPaint","paint","Βαφή","Όλα")}${Object.values(af).some(v => v !== "all") ? `<button type="button" id="aClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα · ${qn(lq)} τεμ. · ${eur(r2(lv))}</span></div><p class="hint">Πάτα ένα προϊόν για να δεις ποιοι πελάτες το παίρνουν και σε τι τιμή.</p>` + tbl([["Κατηγορία"],["Κωδικός"],["Προϊόν"],["Σχήμα"],["Υλικό"],["Βαφή"],["Πελάτες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], list.map(r => `<tr data-prodcust="${esc(r.p.k)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.p.code)}</td><td>${esc(r.desc || r.p.name)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td>${esc(r.paint)}</td><td class="r num">${r.p.list.length}</td><td class="r num">${qn(r.p.qty)}</td><td class="r num">${eur(r2(r.p.value))}</td><td class="r num">${pct(r.p.value,totV)}</td></tr>`));
     } else {
       body = `<p class="hint">Γραμμές όπου η χρέωση διαφέρει από την τιμή καταλόγου με την έκπτωση του πελάτη.</p>` + tbl([["Ημερομηνία"],["Πελάτης"],["Προϊόν"],["Χρεώθηκε","r"],["Αναμενόμενη","r"],["Διαφορά","r"],["Αιτία"]], deviations().map(x => `<tr><td class="num">${dt(x.d.date)}</td><td>${esc(x.c ? x.c.name : "")}</td><td>${esc(lineName(x.l))}</td><td class="r num">${eur(x.np)}</td><td class="r num">${eur(x.ex.net)}</td><td class="r num dev">${(x.np-x.ex.net>0?"+":"")}${eur(Math.round((x.np-x.ex.net)*1000)/1000)}</td><td><select class="reason" data-note="${esc(x.noteId)}" aria-label="Αιτία">${REASONS.map(r => `<option ${noteFor(x.noteId).reason===r?"selected":""} value="${esc(r)}">${r||"—"}</option>`).join("")}</select></td></tr>`));
     }
@@ -987,8 +994,9 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const q = key($("q").value);
     const any = customers.length || docs.length;
     $("empty").hidden = !!any;
-    const unpriced = docs.filter(d => d.purpose !== "Επιστροφή").reduce((n,d) => n + lines(d).filter(l => num(l.price) == null).length, 0);
-    $("totals").innerHTML = any ? `<span>Πελάτες <b>${customers.length}</b></span><span>Παραστατικά <b>${docs.length}</b></span><span>Γραμμές χωρίς τιμή <b>${unpriced}</b></span>` : "";
+    const ym = curYM(), nMonth = docs.filter(d => String(d.date || "").startsWith(ym)).length;
+    $("totals").innerHTML = any ? `<span>Παραστατικά ${MONTHS[+ym.slice(5) - 1]} ${ym.slice(0,4)} <b>${nMonth}</b></span>` : "";
+    $("tabC").textContent = `Πελάτες (${customers.length})`; $("tabP").textContent = `Προϊόντα (${catalog.length})`; $("tabG").textContent = `Πρακτορεία (${agents.length})`;
     $("custList").hidden = tab !== "C"; $("docList").hidden = tab !== "D"; $("anaList").hidden = tab !== "A"; $("prodList").hidden = tab !== "P"; $("agList").hidden = tab !== "G"; $("todoList").hidden = tab !== "T"; $("q").hidden = tab === "A" || (tab === "C" && !!selCust);
     ["C","P","G","T","A"].forEach(t => $("tab"+t).setAttribute("aria-selected", tab === t));
     $("agentNames").innerHTML = [...new Set(docs.map(d => (d.agent||"").trim()).filter(Boolean))].sort().map(a => `<option value="${esc(a)}">`).join("");
@@ -1126,8 +1134,9 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const want = fold(catBuf), opt = [...e.target.options].find(o => o.value !== "all" && fold(o.value).startsWith(want));
     if (opt && opt.value !== pf[PSEL[id]]) { pf[PSEL[id]] = opt.value; render(); const sel = $(id); if (sel) sel.focus(); }
   });
-  document.addEventListener("change", e => { if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; if (anaPeriod === "R" && !anaFrom) { const r = rangeOf("M" + curYM()); anaFrom = r[0]; anaTo = r[1]; } render(); } if (e.target.id === "anaFrom" || e.target.id === "anaTo") { if (e.target.id === "anaFrom") anaFrom = e.target.value; else anaTo = e.target.value; render(); } if (PSEL[e.target.id]) { pf[PSEL[e.target.id]] = e.target.value; render(); } });
+  document.addEventListener("change", e => { if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; if (anaPeriod === "R" && !anaFrom) { const r = rangeOf("M" + curYM()); anaFrom = r[0]; anaTo = r[1]; } render(); } if (e.target.id === "anaFrom" || e.target.id === "anaTo") { if (e.target.id === "anaFrom") anaFrom = e.target.value; else anaTo = e.target.value; render(); } if (PSEL[e.target.id]) { pf[PSEL[e.target.id]] = e.target.value; render(); } if (ASEL[e.target.id]) { af[ASEL[e.target.id]] = e.target.value; render(); } });
   document.addEventListener("input", e => { if (e.target.id !== "prodDim") return; pf.dim = e.target.value; render(); const i = $("prodDim"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } });
+  document.addEventListener("click", e => { if (e.target.id === "aClear") { Object.keys(af).forEach(k => af[k] = "all"); render(); } });
   document.addEventListener("click", e => { if (e.target.id !== "prodClear") return; Object.assign(pf, {cat:"all", dim:"", shape:"all", thick:"all", mat:"all", paint:"all", feat:"all"}); render(); });
   document.addEventListener("click", e => {
     const th = e.target.closest("table.sortable th"); if (!th) return;

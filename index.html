@@ -105,6 +105,9 @@ textarea{min-height:56px;resize:vertical}
 .periodbar{display:flex;gap:10px;align-items:center;margin-top:4px}
 .periodbar label{font-size:.85rem;color:var(--muted);font-weight:600}
 .periodbar select{min-width:240px}
+#prodList .periodbar{flex-wrap:wrap}
+#prodList .periodbar select{min-width:0;max-width:220px}
+#prodList #prodDim{width:130px}
 table.sortable th{cursor:pointer;user-select:none}
 table.sortable th:hover{color:var(--fg)}
 table.sortable th[data-dir="desc"]::after{content:" ▼";font-size:.7em}
@@ -631,20 +634,46 @@ select.reason{font-size:.82rem;padding:4px 6px}
     docs.forEach(d => { if (d.purpose === "Επιστροφή") return; lines(d).forEach(l => { if (num(l.price) != null && match(l) && (!best || String(d.date) >= String(best.date))) best = {date: d.date, price: num(l.price)}; }); });
     return best ? best.price : null;
   }
-  let prodCat = "all", prodFeat = "all";
+  const pf = {cat:"all", dim:"", mat:"all", paint:"all", feat:"all"};
+  const PSEL = {prodCat:"cat", prodMat:"mat", prodPaint:"paint", prodFeat:"feat"};
+  // Split a product name into filterable columns: dimensions, material, paint and remaining particulars.
+  const DIM_RE = /πλευρά\s*\d[\d,.]*|Νο\s?\d[\d,.]*|[ΦΜΠΥΝ]\d[\d,.]*|\d[\d,.]*(?=\s*×)|×\s*[ΜΠΥ]?\d[\d,.]*|–\s*[\d,.]+\s*χιλ\./g;
+  const dimNorm = t => String(t || "").replace(/[xχΧX*]/g, "×").replace(/Νο/g, "").replace(/[ΦΜΠΥΝφμπυν\s]/g, "").replace(/\./g, ",");
+  function prodCols(p, catName){
+    const name = p.fullName || pretty(p.description || "") || "";
+    const feats = Array.isArray(p.features) ? p.features : [];
+    const parts = name.match(DIM_RE) || [];
+    let dim = parts.map(x => /^–/.test(x) ? " " + x.replace(/\s+/g, " ") : x.replace(/\s+/g, "")).join("").trim();
+    if (!dim) dim = [p.diameter ? `Φ${qn(num(p.diameter))}` : "", p.length ? `Μ${qn(num(p.length))}×Π${qn(num(p.width))}` : "", p.depth ? `Υ${qn(num(p.depth))}` : ""].filter(Boolean).join("×");
+    const perforated = / διάτρητ/.test(catName);
+    const cat = catName.replace(/ διάτρητ\S*/, "");
+    const painted = /βαμμέν/i.test(p.material || "") || feats.includes("βαμμένο") || /βαμμέν/i.test(name);
+    const mat = String(p.material || "").replace(/\s*βαμμέν\S*/i, "").trim();
+    let rest = name.replace(DIM_RE, " ").replace(/αλουμιν\S*|ανοξείδωτ\S*|βαμμέν\S*|διάτρητ\S*/gi, " ");
+    feats.forEach(f => { rest = rest.split(f).join(" "); });
+    const cw = cat.split(/\s+/).map(fold);
+    let words = rest.replace(/[()]/g, " ").split(/\s+/).filter(w => w && !cw.some(c => c === fold(w) || (c.length >= 4 && fold(w).slice(0, 5) === c.slice(0, 5))));
+    if (words.length && !/^(Ειδική κατασκευή|Δεν έχει ταξινομηθεί)$/.test(catName) && fold(words[0]) === fold(name.split(/\s+/)[0])) words = words.slice(1);
+    rest = words.join(" ").trim();
+    const extras = feats.filter(f => f !== "βαμμένο" && !/^πάχος/.test(f));
+    if (perforated && !extras.includes("διάτρητο")) extras.push("διάτρητο");
+    if (rest && !extras.some(f => fold(f) === fold(rest))) extras.push(rest);
+    return {cat, dim, dn: dimNorm(dim), mat: mat || "–", paint: painted ? "Βαμμένο" : "Άβαφο", extras};
+  }
   function renderCatalog(q){
     const u = usage();
     const rows = [];
     catalog.forEach(p => { const lp = listPriceAt(p); const price = lp ? num(lp.price) : lastInvoicedPrice(l => productFor(l) === p);
-      rows.push({id: p._id, feats: Array.isArray(p.features) ? p.features : [], size: sizeKey(p.fullName || p.description, p), code: p.code, name: (p.fullName || pretty(p.description)) + (p.unit ? ` (τιμή ανά ${p.unit})` : ""), cat: p.type === "special" ? "Ειδική κατασκευή" : (p.category || "Χωρίς κατηγορία"), cost: num(p.costPrice), price}); });
-    [...u.values()].filter(x => x.k.startsWith("d:")).forEach(x => rows.push({id: "", nk: x.k, feats: [], size: sizeKey(x.desc), code: x.code, name: pretty(x.desc), cat: "Δεν έχει ταξινομηθεί", cost: null, price: lastInvoicedPrice(l => lineKey(l) === x.k)}));
-    const cats = countBy(rows, r => r.cat).sort((a,b) => a[0].localeCompare(b[0], "el"));
-    if (prodCat !== "all" && !cats.some(([c]) => c === prodCat)) prodCat = "all";
-    const feats = countBy(rows.flatMap(r => r.feats), f => f).sort((a,b) => a[0].localeCompare(b[0], "el"));
-    if (prodFeat !== "all" && !feats.some(([f]) => f === prodFeat)) prodFeat = "all";
-    const list = rows.filter(r => (prodCat === "all" || r.cat === prodCat) && (prodFeat === "all" || r.feats.includes(prodFeat)) && (!q || [r.code, r.name, r.cat].some(v => key(v).includes(q)))).sort((a,b) => a.cat.localeCompare(b.cat, "el") || cmpSize(a.size, b.size) || a.name.localeCompare(b.name, "el", {numeric:true}));
-    $("prodList").innerHTML = `<div class="periodbar"><label for="prodCat">Κατηγορία</label><select id="prodCat"><option value="all">Όλες οι κατηγορίες (${rows.length})</option>${cats.map(([c,n]) => `<option value="${esc(c)}" ${prodCat===c?"selected":""}>${esc(c)} (${n})</option>`).join("")}</select><label for="prodFeat">Ιδιαιτερότητα</label><select id="prodFeat"><option value="all">Όλες</option>${feats.map(([f,n]) => `<option value="${esc(f)}" ${prodFeat===f?"selected":""}>${esc(f)} (${n})</option>`).join("")}</select></div><div class="custbody"><p class="hint">Η τιμή πώλησης είναι η αρχική, πριν από την έκπτωση κάθε πελάτη. Το κόστος παραγωγής θα συμπληρωθεί όταν έχουμε τα στοιχεία.</p>${tbl([["Κωδικός"],["Προϊόν"],["Ιδιαιτερότητες"],["Κατηγορία"],["Κόστος παραγωγής","r"],["Τιμή πώλησης","r"],["Με ΦΠΑ 24%","r"]],
-      list.map(r => `<tr ${r.id ? `data-prod="${esc(r.id)}"` : `data-newprod="${esc(r.nk)}"`}><td class="num">${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.feats.join(", "))}</td><td>${esc(r.cat)}</td><td class="r num">${r.cost != null ? eur(r.cost) : "–"}</td><td class="r num">${eur(r.price)}</td><td class="r num"><b>${r.price != null ? eur(r2(r.price * 1.24)) : "–"}</b></td></tr>`))}
+      rows.push(Object.assign({id: p._id, size: sizeKey(p.fullName || p.description, p), code: p.code, name: (p.fullName || pretty(p.description)) + (p.unit ? ` (τιμή ανά ${p.unit})` : ""), cost: num(p.costPrice), price}, prodCols(p, p.type === "special" ? "Ειδική κατασκευή" : (p.category || "Χωρίς κατηγορία")))); });
+    [...u.values()].filter(x => x.k.startsWith("d:")).forEach(x => rows.push(Object.assign({id: "", nk: x.k, size: sizeKey(x.desc), code: x.code, name: pretty(x.desc), cost: null, price: lastInvoicedPrice(l => lineKey(l) === x.k)}, prodCols({description: x.desc}, "Δεν έχει ταξινομηθεί"))));
+    const opts = (f, vals) => { const c = countBy(vals, v => v).sort((x, y) => x[0].localeCompare(y[0], "el")); if (pf[f] !== "all" && !c.some(([v]) => v === pf[f])) pf[f] = "all"; return c.map(([v, n]) => `<option value="${esc(v)}" ${pf[f] === v ? "selected" : ""}>${esc(v)} (${n})</option>`).join(""); };
+    const catO = opts("cat", rows.map(r => r.cat)), matO = opts("mat", rows.map(r => r.mat)), paintO = opts("paint", rows.map(r => r.paint)), featO = opts("feat", rows.flatMap(r => r.extras));
+    const dq = dimNorm(pf.dim), dre = dq ? new RegExp("(^|[^0-9,])" + dq.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) : null;
+    const list = rows.filter(r => (pf.cat === "all" || r.cat === pf.cat) && (!dre || dre.test(r.dn)) && (pf.mat === "all" || r.mat === pf.mat) && (pf.paint === "all" || r.paint === pf.paint) && (pf.feat === "all" || r.extras.includes(pf.feat)) && (!q || [r.code, r.name, r.cat, r.dim, r.mat, r.extras.join(" ")].some(v => key(v).includes(q)))).sort((a,b) => a.cat.localeCompare(b.cat, "el") || cmpSize(a.size, b.size) || a.name.localeCompare(b.name, "el", {numeric:true}));
+    const active = pf.cat !== "all" || pf.dim || pf.mat !== "all" || pf.paint !== "all" || pf.feat !== "all";
+    const sel = (id, label, all, o) => `<label for="${id}">${label}</label><select id="${id}"><option value="all">${all}</option>${o}</select>`;
+    $("prodList").innerHTML = `<div class="periodbar">${sel("prodCat", "Κατηγορία", `Όλες (${rows.length})`, catO)}<label for="prodDim">Διάσταση</label><input type="search" id="prodDim" placeholder="π.χ. 30×20" value="${esc(pf.dim)}">${sel("prodMat", "Υλικό", "Όλα", matO)}${sel("prodPaint", "Βαφή", "Όλα", paintO)}${sel("prodFeat", "Ιδιαιτερότητα", "Όλες", featO)}${active ? `<button type="button" id="prodClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα</span></div><div class="custbody"><p class="hint">Η τιμή πώλησης είναι η αρχική, πριν από την έκπτωση κάθε πελάτη. Το κόστος παραγωγής θα συμπληρωθεί όταν έχουμε τα στοιχεία.</p>${tbl([["Κωδικός"],["Κατηγορία"],["Διάσταση"],["Υλικό"],["Βαφή"],["Ιδιαιτερότητες"],["Κόστος παραγωγής","r"],["Τιμή πώλησης","r"],["Με ΦΠΑ 24%","r"]],
+      list.map(r => `<tr ${r.id ? `data-prod="${esc(r.id)}"` : `data-newprod="${esc(r.nk)}"`} title="${esc(r.name)}"><td class="num">${esc(r.code)}</td><td>${esc(r.cat)}</td><td class="num">${esc(r.dim)}</td><td>${esc(r.mat)}</td><td>${esc(r.paint)}</td><td>${esc(r.extras.join(", "))}</td><td class="r num">${r.cost != null ? eur(r.cost) : "–"}</td><td class="r num">${eur(r.price)}</td><td class="r num"><b>${r.price != null ? eur(r2(r.price * 1.24)) : "–"}</b></td></tr>`))}
       </div>`;
     applySorts($("prodList"), "products");
     fitProd();
@@ -1039,13 +1068,14 @@ select.reason{font-size:.82rem;padding:4px 6px}
   // Type-ahead on the category list: typing letters jumps to the first category that starts with them.
   let catBuf = "", catT = 0;
   document.addEventListener("keydown", e => {
-    const id = e.target.id; if ((id !== "prodCat" && id !== "prodFeat") || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+    const id = e.target.id; if (!PSEL[id] || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault(); clearTimeout(catT); catBuf += e.key; catT = setTimeout(() => { catBuf = ""; }, 1200);
     const want = fold(catBuf), opt = [...e.target.options].find(o => o.value !== "all" && fold(o.value).startsWith(want));
-    const cur = id === "prodCat" ? prodCat : prodFeat;
-    if (opt && opt.value !== cur) { if (id === "prodCat") prodCat = opt.value; else prodFeat = opt.value; render(); const sel = $(id); if (sel) sel.focus(); }
+    if (opt && opt.value !== pf[PSEL[id]]) { pf[PSEL[id]] = opt.value; render(); const sel = $(id); if (sel) sel.focus(); }
   });
-  document.addEventListener("change", e => { if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; render(); } if (e.target.id === "prodCat") { prodCat = e.target.value; render(); } if (e.target.id === "prodFeat") { prodFeat = e.target.value; render(); } });
+  document.addEventListener("change", e => { if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; render(); } if (PSEL[e.target.id]) { pf[PSEL[e.target.id]] = e.target.value; render(); } });
+  document.addEventListener("input", e => { if (e.target.id !== "prodDim") return; pf.dim = e.target.value; render(); const i = $("prodDim"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } });
+  document.addEventListener("click", e => { if (e.target.id !== "prodClear") return; Object.assign(pf, {cat:"all", dim:"", mat:"all", paint:"all", feat:"all"}); render(); });
   document.addEventListener("click", e => {
     const th = e.target.closest("table.sortable th"); if (!th) return;
     const table = th.closest("table"), col = th.cellIndex, dir = th.dataset.dir ? (th.dataset.dir === "desc" ? "asc" : "desc") : (th.classList.contains("r") ? "desc" : "asc");

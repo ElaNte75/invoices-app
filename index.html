@@ -128,6 +128,7 @@ textarea{min-height:56px;resize:vertical}
 .anasec table{width:100%}
 .scroll5{overflow-y:auto}
 .scroll5 .fillb td{border-bottom-color:transparent}
+.scroll5 tfoot .tot{color:var(--accent)}
 .scroll5 thead th{position:sticky;top:0;z-index:1;background:var(--surface);box-shadow:inset 0 -1px 0 var(--line)}
 .scroll5 tfoot td{position:sticky;bottom:0;background:var(--surface);font-weight:700;border-bottom:0;box-shadow:inset 0 1px 0 var(--line)}
 .scroll5 tbody{counter-reset:rn}
@@ -733,7 +734,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     $("listTitle").textContent = p.name + (anaPeriod === "all" ? "" : " · " + periodLabel());
     const L = p.list.sort((a,b)=>b.s.qty-a.s.qty), vatP = s => s.lastPrice != null ? r2(s.lastPrice*(1+s.lastVat/100)) : null;
     const wavg = f => { let q = 0, v = 0; L.forEach(({s}) => { const x = f(s); if (x != null && s.qty) { q += s.qty; v += x*s.qty; } }); return q ? r2(v/q) : null; };
-    const foot = `<td class="rn"></td><td>Σύνολο · Μ.Ο.</td><td></td><td class="r num">${L.reduce((a,x)=>a+x.s.times,0)}</td><td class="r num">${qn(L.reduce((a,x)=>a+x.s.qty,0))}</td><td class="r num">${eur(wavg(s => s.lastList))}</td><td></td><td class="r num">${eur(wavg(s => s.lastPrice))}</td><td class="r num">${eur(wavg(vatP))}</td>`;
+    const foot = `<td class="rn"></td><td><span class="tot">Σύνολο</span> · Μ.Ο.</td><td></td><td class="r num tot">${L.reduce((a,x)=>a+x.s.times,0)}</td><td class="r num tot">${qn(L.reduce((a,x)=>a+x.s.qty,0))}</td><td class="r num">${eur(wavg(s => s.lastList))}</td><td></td><td class="r num">${eur(wavg(s => s.lastPrice))}</td><td class="r num">${eur(wavg(vatP))}</td>`;
     $("listBody").innerHTML = tbl([["#","r rn"],["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Τιμή χωρίς ΦΠΑ","r"],["Έκπτωση","r"],["Με έκπτωση","r"],["Με ΦΠΑ","r"]], L.map(({c,s}) => `<tr><td class="r num rn"></td><td>${shortCell(c)}</td><td>${esc(c.city)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${s.lastDisc ? qn(s.lastDisc) + "%" : "–"}</td><td class="r num">${eur(s.lastPrice)}</td><td class="r num">${eur(vatP(s))}</td></tr>`), foot, "scroll5");
     $("listSheet").hidden = false; fixRows5($("listBody"));
   }

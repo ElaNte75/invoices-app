@@ -115,17 +115,19 @@ textarea{min-height:56px;resize:vertical}
 .periodbar{display:flex;gap:10px;align-items:center;margin-top:4px}
 .periodbar label{font-size:.85rem;color:var(--muted);font-weight:600}
 .periodbar select{min-width:240px}
-.trend{margin-left:5px;font-size:.72rem;font-weight:700;white-space:nowrap}
+.trend{display:inline-flex;align-items:baseline;margin-left:6px;font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:.72rem;font-weight:700;white-space:nowrap;text-align:left}
+.trend i{font-style:normal;display:inline-block;width:1.3em;text-align:center}
+.trend b{display:inline-block;width:4ch;text-align:right;font-weight:700}
 #anaList td:first-child{white-space:normal;min-width:180px}
 .trend.up{color:#5fc48a}.trend.down{color:var(--danger)}.trend.flat{color:var(--muted)}
-.trend.demo{opacity:.6;font-style:italic}
+.trend.demo{opacity:.6}
 #prodList .periodbar,.periodbar.filters{flex-wrap:wrap}
 .periodbar.filters{margin-bottom:8px}
-.anasec{width:100%;max-width:1150px;margin:34px auto 0}
+.anasec{margin:34px 0 0}
 .anasec h4{margin:0 0 10px}
 .anasec table{width:100%}
-#anaList .info{max-width:1150px;margin:8px auto 0;gap:18px 24px}
-#anaList .info + p.hint{max-width:1150px;margin:12px auto 0}
+#anaList .info{margin:8px 0 0;gap:18px 24px}
+#anaList .info + p.hint{margin:12px 0 0}
 .periodbar.filters select{min-width:0;max-width:220px}
 #prodList .periodbar select{min-width:0;max-width:220px}
 #prodList #prodDim{width:130px}
@@ -498,7 +500,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
 
   const netPrice = l => { const p = num(l.price); if (p == null) return null; return Math.round(p * (1 - (num(l.discount)||0)/100) * 1000) / 1000; };
   const priceCell = s => s.lastPrice == null ? "–" : eur(s.lastPrice) + (s.lastDisc ? `<br><span class="hint">${eur(s.lastList)} −${qn(s.lastDisc)}%</span>` : "");
-  const pct = (a,b) => b ? (a*100/b).toLocaleString("el-GR",{maximumFractionDigits:1}) + "%" : "–";
+  const pct = (a,b) => b ? (a*100/b).toLocaleString("el-GR",{minimumFractionDigits:1,maximumFractionDigits:1}) + "%" : "–";
   // Merge every document line per customer + product
   function statsFor(cid){
     const map = new Map();
@@ -604,13 +606,14 @@ select.reason{font-size:.82rem;padding:4px 6px}
   // Placeholder arrows shown until the previous period has data, so the layout can be judged.
   const TREND_DEMO = {active:["up",8], orders:["up",12], qty:["down",5], net:["up",3], avg:["flat",0], prods:["down",10]};
   // Row-level arrows; while the previous period is empty, a stable pseudo-random placeholder per row.
+  const trendSpan = (dir, p, demo) => `<span class="trend ${dir}${demo ? " demo" : ""}"><i>${{up:"▲", down:"▼", flat:"–"}[dir]}</i><b>${p != null && dir !== "flat" ? Math.min(Math.round(p), 999) + "%" : ""}</b></span>`;
   function cmpTrend(cur, a, seed){
     if (anaPeriod === "all") return "";
     let dir, p = null; const demo = !prevStats || !prevStats.orders;
     if (demo) { let h = 0; for (const ch of String(seed)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; dir = ["up","down","flat"][h % 3]; p = dir === "flat" ? 0 : 2 + h % 25; }
     else if (!a) dir = cur > 0 ? "up" : "flat";
     else { const ch = (cur - a) / a * 100; dir = Math.abs(ch) < 0.5 ? "flat" : ch > 0 ? "up" : "down"; p = Math.abs(ch); }
-    return `<span class="trend ${dir}${demo ? " demo" : ""}">${{up:"▲", down:"▼", flat:"–"}[dir]}${p != null && dir !== "flat" ? " " + Math.round(p) + "%" : ""}</span>`;
+    return trendSpan(dir, p, demo);
   }
   let anaAllDocs = [];
   function atPrev(fn){ const pp = prevPeriod(); if (!pp) return null; const cur = docs; docs = anaAllDocs.filter(d => inRange(d, pp.r)); try { return fn(); } finally { docs = cur; } }
@@ -619,7 +622,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     let dir, p = null; const demo = !prevStats || !prevStats.orders;
     if (demo) [dir, p] = TREND_DEMO[k];
     else { const a = prevStats[k]; if (!a) dir = cur > 0 ? "up" : "flat"; else { const ch = (cur - a) / a * 100; dir = Math.abs(ch) < 0.5 ? "flat" : ch > 0 ? "up" : "down"; p = Math.abs(ch); } }
-    return `<span class="trend ${dir}${demo ? " demo" : ""}">${{up:"▲", down:"▼", flat:"–"}[dir]}${p != null && dir !== "flat" ? " " + Math.round(p) + "%" : ""}</span>`;
+    return trendSpan(dir, p, demo);
   }
   function periodOptions(){
     const ym = [...new Set(docs.map(d => String(d.date||"").slice(0,7)).filter(x => /^\d{4}-\d{2}$/.test(x)))].sort().reverse();

@@ -704,7 +704,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   function openProdCustInner(k){
     const p = analysisData().prods.find(x => x.k === k); if (!p) return;
     $("listTitle").textContent = p.name + (anaPeriod === "all" ? "" : " · " + periodLabel());
-    $("listBody").innerHTML = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Τιμή χωρίς ΦΠΑ","r"],["Με έκπτωση","r"],["Με ΦΠΑ","r"]], p.list.sort((a,b)=>b.s.qty-a.s.qty).map(({c,s}) => `<tr><td>${shortCell(c)}</td><td>${esc(c.city)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${eur(s.lastPrice)}${s.lastDisc ? ` <span class="hint">(−${qn(s.lastDisc)}%)</span>` : ""}</td><td class="r num">${s.lastPrice != null ? eur(r2(s.lastPrice*(1+s.lastVat/100))) : "–"}</td></tr>`));
+    $("listBody").innerHTML = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Τιμή χωρίς ΦΠΑ","r"],["Έκπτωση","r"],["Με έκπτωση","r"],["Με ΦΠΑ","r"]], p.list.sort((a,b)=>b.s.qty-a.s.qty).map(({c,s}) => `<tr><td>${shortCell(c)}</td><td>${esc(c.city)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${s.lastDisc ? "−" + qn(s.lastDisc) + "%" : "–"}</td><td class="r num">${eur(s.lastPrice)}</td><td class="r num">${s.lastPrice != null ? eur(r2(s.lastPrice*(1+s.lastVat/100))) : "–"}</td></tr>`));
     $("listSheet").hidden = false;
   }
   const shortOf = c => (c && (c.shortName || c.name)) || "";
@@ -990,8 +990,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
     return rows.length ? `<div class="tbox"><table class="dtable"><thead><tr><th>Πελάτης</th><th>Πόλη</th><th>Τηλέφωνο</th><th>ΑΦΜ</th><th>Συνήθης αποστολή</th><th class="r">Παραγγελίες</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>` : `<p class="hint">Κανένας πελάτης δεν ταιριάζει στην αναζήτηση.</p>`;
   }
   function productTable(st){
-    return `${st.length ? `<div class="tbox"><table class="ptable"><thead><tr><th>Κωδικός</th><th>Προϊόν</th><th class="r">Παραγγελίες</th><th class="r">Συνολική ποσότητα</th><th class="r">Μ.Ο. ανά παραγγελία</th><th class="r">Τιμή (προ έκπτωσης, χωρίς ΦΠΑ)</th><th class="r">Τιμή με έκπτωση</th><th class="r">Τελική τιμή με ΦΠΑ</th></tr></thead><tbody>
-            ${st.map(s => `<tr title="${esc(s.product)}"><td class="num">${esc(s.code) || "–"}</td><td>${esc(s.name)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${s.times ? qn(Math.round(s.sold/s.times*10)/10) : "–"}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${eur(s.lastPrice)}${s.lastDisc ? ` <span class="hint">(−${qn(s.lastDisc)}%)</span>` : ""}</td><td class="r num"><b>${s.lastPrice != null ? eur(Math.round(s.lastPrice * (1 + s.lastVat/100) * 100)/100) : "–"}</b></td></tr>`).join("")}
+    return `${st.length ? `<div class="tbox"><table class="ptable"><thead><tr><th>Κωδικός</th><th>Προϊόν</th><th class="r">Παραγγελίες</th><th class="r">Συνολική ποσότητα</th><th class="r">Μ.Ο. ανά παραγγελία</th><th class="r">Τιμή (προ έκπτωσης, χωρίς ΦΠΑ)</th><th class="r">Έκπτωση</th><th class="r">Τιμή με έκπτωση</th><th class="r">Τελική τιμή με ΦΠΑ</th></tr></thead><tbody>
+            ${st.map(s => `<tr title="${esc(s.product)}"><td class="num">${esc(s.code) || "–"}</td><td>${esc(s.name)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${s.times ? qn(Math.round(s.sold/s.times*10)/10) : "–"}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${s.lastDisc ? "−" + qn(s.lastDisc) + "%" : "–"}</td><td class="r num">${eur(s.lastPrice)}</td><td class="r num"><b>${s.lastPrice != null ? eur(Math.round(s.lastPrice * (1 + s.lastVat/100) * 100)/100) : "–"}</b></td></tr>`).join("")}
           </tbody></table></div>` : `<p class="hint">Δεν υπάρχουν ακόμα προϊόντα.</p>`}`;
   }
   function custAnalysis(c, st, cd){

@@ -1030,7 +1030,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const any = customers.length || docs.length;
     $("empty").hidden = !!any;
     const ym = curYM(), nMonth = docs.filter(d => String(d.date || "").startsWith(ym)).length;
-    $("totals").innerHTML = any ? `<span>Παραστατικά ${MONTHS[+ym.slice(5) - 1]} ${ym.slice(0,4)} <b>${nMonth}</b></span>` : "";
+    $("totals").innerHTML = any ? `<span>Παραστατικά ${MONTHS[+ym.slice(5) - 1]} ${ym.slice(0,4)}&nbsp; <b>(${nMonth})</b></span>` : "";
     $("tabC").textContent = `Πελάτες (${customers.length})`; $("tabP").textContent = `Προϊόντα (${catalog.length})`; $("tabG").textContent = `Πρακτορεία (${agents.length})`;
     $("custList").hidden = tab !== "C"; $("docList").hidden = tab !== "D"; $("anaList").hidden = tab !== "A"; $("prodList").hidden = tab !== "P"; $("agList").hidden = tab !== "G"; $("todoList").hidden = tab !== "T"; $("q").hidden = tab === "A" || (tab === "C" && !!selCust);
     ["C","P","G","T","A"].forEach(t => $("tab"+t).setAttribute("aria-selected", tab === t));

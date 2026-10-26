@@ -43,6 +43,10 @@ button:disabled{opacity:.5;cursor:default}
 .totals b{font-family:var(--f-num);color:var(--fg);font-weight:500}
 .status{font-size:.88rem;color:var(--muted);min-height:1.2em}
 .status.err{color:var(--danger)}
+.loading{display:flex;align-items:center;gap:.7em;margin:1rem 0;padding:1rem 1.2rem;border-radius:12px;background:#fff;border:1px solid #d9e2df;font-weight:600}
+.loading::before{content:"";width:1.2em;height:1.2em;border-radius:50%;border:3px solid #cfdcd8;border-top-color:#1f5f58;animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading:not([hidden]) ~ .empty,.loading:not([hidden]) ~ .list{display:none!important}
 input[type=search]{font:inherit;width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
 .empty{border:1px dashed var(--line);border-radius:10px;padding:28px 18px;text-align:center;color:var(--muted)}
 .empty strong{display:block;color:var(--fg);font-family:var(--f-display);font-size:1.1rem;margin-bottom:4px}
@@ -167,7 +171,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
     <button role="tab" id="tabA" aria-selected="false" type="button">Ανάλυση</button>
   </div>
   <input type="search" id="q" placeholder="Αναζήτηση επωνυμίας, ΑΦΜ, πόλης, προϊόντος…" aria-label="Αναζήτηση">
-  <div class="status" id="status">Φόρτωση…</div>
+  <div class="status" id="status"></div>
+  <div class="loading" id="loading" role="status">Φόρτωση δεδομένων από το GitHub…</div>
   <div class="empty" id="empty" hidden>
     <strong>Δεν υπάρχουν ακόμα καταχωρίσεις</strong>
     Στείλε φωτογραφία τιμολογίου ή δελτίου αποστολής στη συνομιλία, ή πάτησε «Νέο παραστατικό».
@@ -366,8 +371,13 @@ select.reason{font-size:.82rem;padding:4px 6px}
     // One query with every file's text times out on GitHub (HTTP 502), so blobs are fetched by oid in batches.
     const batches = [];
     for (let i = 0; i < files.length; i += 150) batches.push(files.slice(i, i + 150));
+    const box = document.getElementById("loading");
+    let done = 0;
+    const progress = () => { if (box) box.textContent = `Φόρτωση δεδομένων από το GitHub… ${done.toLocaleString("el-GR")} / ${files.length.toLocaleString("el-GR")}`; };
+    progress();
     const texts = await Promise.all(batches.map(async batch => {
       const r = await gql(`query($o:String!,$n:String!){repository(owner:$o,name:$n){${batch.map((f, i) => `f${i}:object(oid:"${f.oid}"){... on Blob{text}}`).join(" ")}}}`, { o:OWNER, n:REPO });
+      done += batch.length; progress();
       return batch.map((f, i) => r.repository["f" + i] && r.repository["f" + i].text);
     }));
     Object.keys(store).forEach(c => store[c].clear());
@@ -379,7 +389,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     head = oid;
     Object.keys(store).forEach(emit);
   }
-  function refresh(){ if (!loading) loading = load().catch(err => { console.error(err); listeners.customers.forEach(l => l.fail && l.fail(err)); const st = document.getElementById("status"); if (st) { st.textContent = "Σφάλμα GitHub: " + (err && err.message || err); st.classList.add("err"); } }).finally(() => { loading = null; }); return loading; }
+  function refresh(){ if (!loading) loading = load().catch(err => { console.error(err); listeners.customers.forEach(l => l.fail && l.fail(err)); const st = document.getElementById("status"); if (st) { st.textContent = "Σφάλμα GitHub: " + (err && err.message || err); st.classList.add("err"); } }).finally(() => { loading = null; const box = document.getElementById("loading"); if (box) box.hidden = true; }); return loading; }
   document.addEventListener("visibilitychange", async () => {
     if (document.visibilityState !== "visible" || !head || loading) return;
     try { if (await headOid() !== head) refresh(); } catch (e) {}

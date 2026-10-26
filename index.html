@@ -526,7 +526,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   }
 
   let priceNotes = [], agents = [], routes = [], todos = [];
-  const REASONS = ["","Χωρίς έκπτωση σε αυτό το είδος","Αύξηση τιμής","Λάθος τιμολόγησης","Αλλαγή συμφωνίας","Ειδική τιμή / προσφορά","Άλλο"];
+  const REASONS = ["","Δεν περάστηκε η έκπτωση","Αύξηση τιμής","Λάθος τιμολόγησης","Αλλαγή συμφωνίας","Ειδική τιμή / προσφορά","Άλλο"];
   function listPriceAt(p, date){
     const h = (Array.isArray(p && p.priceHistory) ? p.priceHistory : []).filter(x => num(x.price) != null && (!date || !x.from || x.from <= date)).sort((a,b)=>String(a.from||"").localeCompare(String(b.from||"")));
     return h.length ? h[h.length-1] : null;
@@ -558,7 +558,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
       } else {
         usual = ag && num(ag.discount) != null ? num(ag.discount) : (num(c && c.baseDiscount) ?? 0);
         if (list != null && Math.abs(price - list) > 0.009) diffs.push({t:`Τιμή ${price > list ? "+" : "−"}${eur(Math.abs(Math.round((price - list)*100)/100))} από κατάλογο`, up: price > list});
-        if (Math.abs(disc - usual) > 0.009) diffs.push({t: disc ? `Έκπτωση ${qn(disc)}% (συνήθως ${usual ? qn(usual) + "%" : "χωρίς"})` : `Χωρίς έκπτωση (συνήθως ${qn(usual)}%)`, up: disc < usual});
+        if (Math.abs(disc - usual) > 0.009) diffs.push({t: !disc ? "Δεν περάστηκε η έκπτωση" : disc > usual ? "Μεγαλύτερη έκπτωση" : "Μικρότερη έκπτωση", up: disc < usual});
       }
       if (diffs.length) out.push({d, l, i, c, p, price, list, disc, usual, diffs, noteId: d._id + "_" + i});
     }); });

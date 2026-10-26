@@ -176,7 +176,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     <button role="tab" id="tabC" aria-selected="true" type="button">Πελάτες</button>
     <button role="tab" id="tabP" aria-selected="false" type="button">Προϊόντα</button>
     <button role="tab" id="tabG" aria-selected="false" type="button">Πρακτορεία</button>
-    <button role="tab" id="tabT" aria-selected="false" type="button">Εκκρεμότητες</button>
+    <button role="tab" id="tabT" aria-selected="false" type="button" hidden>Εκκρεμότητες</button>
     <button role="tab" id="tabA" aria-selected="false" type="button">Ανάλυση</button>
   </div>
   <input type="search" id="q" placeholder="Αναζήτηση επωνυμίας, ΑΦΜ, πόλης, προϊόντος…" aria-label="Αναζήτηση">
@@ -898,9 +898,9 @@ select.reason{font-size:.82rem;padding:4px 6px}
   function custListHTML(q){
     const rows = customers.slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"el"))
       .filter(c => !q || CF.some(([k]) => key(c[k]).includes(q)) || docs.some(d => d.customerId === c._id && (key(d.deliveryCity).includes(q) || lines(d).some(l => key(l.product).includes(q) || key(lineName(l)).includes(q)))))
-      .map(c => { const cd = docs.filter(d => d.customerId === c._id && d.purpose !== "Επιστροφή"); const usual = countBy(cd.filter(d => d.delivery !== ""), deliveryLabel)[0]; const n = issuesForCustomer(c._id).reduce((a,x)=>a+x.items.length,0);
-        return `<tr data-opencust="${esc(c._id)}"><td>${nameCell(c)}</td><td>${esc(c.city)}</td><td class="num">${esc(c.phone)}</td><td class="num">${esc(c.afm)}</td><td>${usual ? esc(usual[0]) : "–"}</td><td class="r num">${cd.length}</td><td class="r">${n ? `<span class="badge warn">${n}</span>` : ""}</td></tr>`; });
-    return rows.length ? `<div class="tbox"><table class="dtable"><thead><tr><th>Πελάτης</th><th>Πόλη</th><th>Τηλέφωνο</th><th>ΑΦΜ</th><th>Συνήθης αποστολή</th><th class="r">Παραγγελίες</th><th class="r">Εκκρεμότητες</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>` : `<p class="hint">Κανένας πελάτης δεν ταιριάζει στην αναζήτηση.</p>`;
+      .map(c => { const cd = docs.filter(d => d.customerId === c._id && d.purpose !== "Επιστροφή"); const usual = countBy(cd.filter(d => d.delivery !== ""), deliveryLabel)[0];
+        return `<tr data-opencust="${esc(c._id)}"><td>${nameCell(c)}</td><td>${esc(c.city)}</td><td class="num">${esc(c.phone)}</td><td class="num">${esc(c.afm)}</td><td>${usual ? esc(usual[0]) : "–"}</td><td class="r num">${cd.length}</td></tr>`; });
+    return rows.length ? `<div class="tbox"><table class="dtable"><thead><tr><th>Πελάτης</th><th>Πόλη</th><th>Τηλέφωνο</th><th>ΑΦΜ</th><th>Συνήθης αποστολή</th><th class="r">Παραγγελίες</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>` : `<p class="hint">Κανένας πελάτης δεν ταιριάζει στην αναζήτηση.</p>`;
   }
   function productTable(st){
     return `${st.length ? `<div class="tbox"><table class="ptable"><thead><tr><th>Κωδικός</th><th>Προϊόν</th><th class="r">Παραγγελίες</th><th class="r">Συνολική ποσότητα</th><th class="r">Μ.Ο. ανά παραγγελία</th><th class="r">Τιμή (προ έκπτωσης, χωρίς ΦΠΑ)</th><th class="r">Τιμή με έκπτωση</th><th class="r">Τελική τιμή με ΦΠΑ</th></tr></thead><tbody>
@@ -920,7 +920,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   }
   function custDetail(c){
     const st = statsFor(c._id), cd = docs.filter(d => d.customerId === c._id), iss = issuesForCustomer(c._id), nIss = iss.reduce((a,x)=>a+x.items.length,0);
-    const tabs = [["info","Στοιχεία"],["prod",`Προϊόντα (${st.length})`],["docs",`Παραστατικά (${cd.length})`],["ana","Ανάλυση"],["todo",`Εκκρεμότητες (${nIss})`]];
+    const tabs = [["info","Στοιχεία"],["prod",`Προϊόντα (${st.length})`],["docs",`Παραστατικά (${cd.length})`],["ana","Ανάλυση"]];
     const field = (l, v, cls) => `<div><span>${l}</span><div class="${cls||""}">${v ? esc(v) : "–"}</div></div>`;
     let body = "";
     if (custTab === "info") body = `<h4>Στοιχεία χρέωσης</h4><div class="info">${field("Επωνυμία", c.name)}${field("Διακριτικός τίτλος", c.tradeName)}${field("ΑΦΜ", c.afm, "num")}${field("ΔΟΥ", c.doy)}${field("Διεύθυνση έδρας", c.address)}${field("Πόλη", c.city)}${field("Τηλέφωνο", c.phone, "num")}${field("Επάγγελμα", c.profession)}${field("Δραστηριότητα", c.activity)}${field("Ιστοσελίδα", c.website)}${field("Βασική έκπτωση", num(c.baseDiscount) != null ? qn(num(c.baseDiscount)) + "%" : "")}</div>

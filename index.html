@@ -524,7 +524,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   }
 
   let priceNotes = [], agents = [], routes = [], todos = [];
-  const REASONS = ["","Αύξηση τιμής","Λάθος τιμολόγησης","Αλλαγή συμφωνίας","Ειδική τιμή / προσφορά","Άλλο"];
+  const REASONS = ["","Χωρίς έκπτωση σε αυτό το είδος","Αύξηση τιμής","Λάθος τιμολόγησης","Αλλαγή συμφωνίας","Ειδική τιμή / προσφορά","Άλλο"];
   function listPriceAt(p, date){
     const h = (Array.isArray(p && p.priceHistory) ? p.priceHistory : []).filter(x => num(x.price) != null && (!date || !x.from || x.from <= date)).sort((a,b)=>String(a.from||"").localeCompare(String(b.from||"")));
     return h.length ? h[h.length-1] : null;
@@ -546,8 +546,19 @@ select.reason{font-size:.82rem;padding:4px 6px}
   function deviations(){
     const out = [];
     docs.forEach(d => { if (d.purpose === "Επιστροφή") return; const c = custOf(d.customerId); lines(d).forEach((l, i) => {
-      const np = netPrice(l); if (np == null) return; const p = productFor(l); const ex = expected(c, p, d.date); if (!ex) return;
-      if (Math.abs(np - ex.net) > 0.009) out.push({d, l, i, c, p, np, ex, noteId: d._id + "_" + i});
+      const price = num(l.price); if (price == null) return; const p = productFor(l); if (!p || p.type === "special") return;
+      const disc = num(l.discount) || 0, date = d.date, ag = activeAgreement(c, p, date), lp = listPriceAt(p, date);
+      const diffs = [];
+      let list = lp ? num(lp.price) : null, usual = null;
+      if (ag && num(ag.price) != null) {
+        const np = netPrice(l), agp = num(ag.price);
+        if (Math.abs(np - agp) > 0.009) diffs.push(`Συμφωνία ${eur(agp)}, χρεώθηκε ${eur(np)}`);
+      } else {
+        usual = ag && num(ag.discount) != null ? num(ag.discount) : (num(c && c.baseDiscount) ?? 0);
+        if (list != null && Math.abs(price - list) > 0.009) diffs.push(`Τιμή ${price > list ? "+" : "−"}${eur(Math.abs(Math.round((price - list)*100)/100))} από κατάλογο`);
+        if (Math.abs(disc - usual) > 0.009) diffs.push(disc ? `Έκπτωση −${qn(disc)}% (συνήθως ${usual ? "−" + qn(usual) + "%" : "χωρίς"})` : `Χωρίς έκπτωση (συνήθως −${qn(usual)}%)`);
+      }
+      if (diffs.length) out.push({d, l, i, c, p, price, list, disc, usual, diffs, noteId: d._id + "_" + i});
     }); });
     return out.sort((a,b)=>String(b.d.date||"").localeCompare(String(a.d.date||"")));
   }
@@ -696,7 +707,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
       const list = rows.filter(r => ok(r)).sort((a,b) => b.p.value - a.p.value), lq = list.reduce((n,r) => n + r.p.qty, 0), lv = list.reduce((n,r) => n + r.p.value, 0);
       body = `<div class="periodbar filters">${asel("aCat","cat","Κατηγορία","Όλες")}${asel("aShape","shape","Σχήμα","Όλα")}${asel("aMat","mat","Υλικό","Όλα")}${asel("aFeat","feat","Ιδιαιτερότητα","Όλες")}${asel("aPaint","paint","Βαφή","Όλα")}${Object.values(af).some(v => v !== "all") ? `<button type="button" id="aClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα · ${qn(lq)} τεμ. · ${eur(r2(lv))}</span></div><p class="hint">Πάτα ένα προϊόν για να δεις ποιοι πελάτες το παίρνουν και σε τι τιμή.</p>` + tbl([["Κατηγορία"],["Κωδικός"],["Προϊόν"],["Σχήμα"],["Υλικό"],["Βαφή"],["Πελάτες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], list.map(r => `<tr data-prodcust="${esc(r.p.k)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.p.code)}</td><td>${esc(r.desc || r.p.name)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td>${esc(r.paint)}</td><td class="r num">${r.p.list.length}${T(r, y => y.list.length, r.p.list.length)}</td><td class="r num">${qn(r.p.qty)}${T(r, y => y.qty, r.p.qty)}</td><td class="r num">${eur(r2(r.p.value))}${T(r, y => y.value, r.p.value)}</td><td class="r num">${pct(r.p.value,totV)}${T(r, y => pTot ? y.value / pTot : 0, totV ? r.p.value / totV : 0)}</td></tr>`));
     } else {
-      body = `<p class="hint">Γραμμές όπου η χρέωση διαφέρει από την τιμή καταλόγου με την έκπτωση του πελάτη.</p>` + tbl([["Ημερομηνία"],["Πελάτης"],["Προϊόν"],["Χρεώθηκε","r"],["Αναμενόμενη","r"],["Διαφορά","r"],["Αιτία"]], deviations().map(x => `<tr><td class="num">${dt(x.d.date)}</td><td>${esc(x.c ? x.c.name : "")}</td><td>${esc(lineName(x.l))}</td><td class="r num">${eur(x.np)}</td><td class="r num">${eur(x.ex.net)}</td><td class="r num dev">${(x.np-x.ex.net>0?"+":"")}${eur(Math.round((x.np-x.ex.net)*1000)/1000)}</td><td><select class="reason" data-note="${esc(x.noteId)}" aria-label="Αιτία">${REASONS.map(r => `<option ${noteFor(x.noteId).reason===r?"selected":""} value="${esc(r)}">${r||"—"}</option>`).join("")}</select></td></tr>`));
+      body = `<p class="hint">Γραμμές όπου η τιμή πριν από την έκπτωση διαφέρει από τον κατάλογο, ή η έκπτωση διαφέρει από τη συνηθισμένη του πελάτη.</p>` + tbl([["Ημερομηνία"],["Πελάτης"],["Προϊόν"],["Τιμή τιμολογίου","r"],["Τιμή καταλόγου","r"],["Έκπτωση","r"],["Συνήθης έκπτωση","r"],["Τι διαφέρει"],["Αιτία"]], deviations().map(x => `<tr><td class="num">${dt(x.d.date)}</td><td>${shortCell(x.c || {})}</td><td>${esc(lineName(x.l))}</td><td class="r num">${eur(x.price)}</td><td class="r num">${x.list != null ? eur(x.list) : "–"}</td><td class="r num">${x.disc ? "−" + qn(x.disc) + "%" : "–"}</td><td class="r num">${x.usual ? "−" + qn(x.usual) + "%" : "–"}</td><td class="dev">${x.diffs.map(esc).join("<br>")}</td><td><select class="reason" data-note="${esc(x.noteId)}" aria-label="Αιτία">${REASONS.map(r => `<option ${noteFor(x.noteId).reason===r?"selected":""} value="${esc(r)}">${r||"—"}</option>`).join("")}</select></td></tr>`));
     }
     $("anaList").innerHTML = `<div class="periodbar"><label for="anaPeriod">Περίοδος</label><select id="anaPeriod">${periodHTML}</select>${anaPeriod === "R" ? `<label for="anaFrom">Από</label><input type="date" id="anaFrom" value="${esc(anaFrom)}"><label for="anaTo">Έως</label><input type="date" id="anaTo" value="${esc(anaTo)}">` : ""}</div><div class="tabs subtabs">${tabs.map(([k,l]) => `<button type="button" data-atab="${k}" aria-selected="${anaTab===k}">${l}</button>`).join("")}</div><div class="custbody">${["cust","ship","prod"].includes(anaTab) ? cmp : ""}${body}</div>`;
   }

@@ -1,0 +1,1099 @@
+<!doctype html>
+<html lang="el">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Αρχείο Τιμολογίων</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600&family=Literata:opsz,wght@7..72,600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+[hidden]{display:none!important}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+/* Ledger: customers as folders holding their product history; documents as a dated list */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --fg:#1b2422; --muted:#5d6b68; --line:#d9e0de;
+  --accent:#1f5f5b; --accent-fg:#ffffff; --danger:#a33a2c; --warn:#8a5a00; --chip:#e4ecea;
+  --f-display:"Literata",Georgia,serif; --f-body:"Commissioner",system-ui,sans-serif; --f-num:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141a19; --surface:#1c2422; --fg:#e6ecea; --muted:#9aa8a5; --line:#2e3a38;
+  --accent:#6fb8b1; --accent-fg:#0f1716; --danger:#e08372; --warn:#e0b45c; --chip:#25302e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141a19; --surface:#1c2422; --fg:#e6ecea; --muted:#9aa8a5; --line:#2e3a38;
+  --accent:#6fb8b1; --accent-fg:#0f1716; --danger:#e08372; --warn:#e0b45c; --chip:#25302e; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:none;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:end;justify-content:space-between}
+h1{font-family:var(--f-display);font-size:1.7rem;margin:0;text-wrap:balance}
+.sub{color:var(--muted);font-size:.9rem;margin:2px 0 0}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;font-weight:500;border-radius:8px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button.danger{color:var(--danger)}
+button.small{padding:5px 10px;font-size:.85rem}
+button.link{border:0;background:none;padding:0;color:var(--accent);text-decoration:underline;font-weight:500}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.5;cursor:default}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{white-space:nowrap}
+.issue{display:flex;gap:8px;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);font-size:.88rem}
+.issue:last-child{border-bottom:0}
+.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--muted);padding:8px 12px}
+.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.totals{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:.9rem;color:var(--muted)}
+.totals b{font-family:var(--f-num);color:var(--fg);font-weight:500}
+.status{font-size:.88rem;color:var(--muted);min-height:1.2em}
+.status.err{color:var(--danger)}
+input[type=search]{font:inherit;width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.empty{border:1px dashed var(--line);border-radius:10px;padding:28px 18px;text-align:center;color:var(--muted)}
+.empty strong{display:block;color:var(--fg);font-family:var(--f-display);font-size:1.1rem;margin-bottom:4px}
+.list{display:grid;gap:10px}
+details.cust,.docitem{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+details.cust summary{list-style:none;cursor:pointer;padding:12px 14px;display:grid;gap:4px}
+details.cust summary::-webkit-details-marker{display:none}
+.top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.name{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.84rem;color:var(--muted)}
+.badge{font-size:.76rem;border-radius:6px;padding:1px 7px;background:var(--chip);color:var(--muted);white-space:nowrap}
+.badge.warn{color:var(--warn)}
+.body{border-top:1px solid var(--line);padding:12px 14px;display:grid;gap:12px}
+.info{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px 16px;font-size:.88rem}
+.info > div > span:first-child{color:var(--muted);display:block;font-size:.74rem;text-transform:uppercase;letter-spacing:.05em}
+.tbox{overflow-x:auto}
+#prodList .tbox{overflow:auto}
+#prodList td:first-child{min-width:0}
+#prodList thead th{position:sticky;top:0;z-index:1;background:var(--surface);box-shadow:inset 0 -1px 0 var(--line)}
+table{border-collapse:collapse;width:100%;font-size:.86rem}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;white-space:nowrap}
+td.r,th.r{text-align:right}
+tbody tr:last-child td{border-bottom:0}
+td:first-child{min-width:230px}
+.ptable td{white-space:nowrap}
+.ptable td:first-child{min-width:0}
+td.r,th.r,td.num,th{white-space:nowrap}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.warn{color:var(--warn)}
+.docitem{padding:12px 14px;display:grid;gap:6px;cursor:pointer;text-align:left;width:100%}
+.lines{font-size:.84rem;color:var(--muted)}
+h4{margin:0;font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.minidocs{display:grid;gap:4px;font-size:.86rem}
+.minidocs button{text-align:left;border:0;background:none;padding:4px 0;color:var(--fg);display:flex;gap:10px;flex-wrap:wrap}
+.minidocs button:hover{color:var(--accent)}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.panel{background:var(--surface);color:var(--fg);width:100%;max-width:680px;max-height:92vh;overflow:auto;border-radius:14px 14px 0 0;padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:grid;gap:14px}
+@media (min-width:700px){.sheet{align-items:center}.panel{border-radius:14px}}
+.panel h2{font-family:var(--f-display);margin:0;font-size:1.25rem}
+.panel h3{margin:4px 0 0;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+label{display:grid;gap:4px;font-size:.8rem;color:var(--muted);font-weight:500}
+label.full{grid-column:1/-1}
+input,textarea,select{font:inherit;font-size:15px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+textarea{min-height:56px;resize:vertical}
+.prow{display:grid;grid-template-columns:1.2fr .8fr 1fr .8fr auto;gap:6px;align-items:center;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.prow .lp{grid-column:1/-1}
+.prow button{padding:7px 10px}
+.phead{display:grid;grid-template-columns:1.2fr .8fr 1fr .8fr 36px;gap:6px;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.badge.ret{color:var(--danger)}
+.row{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between}
+.row .right{display:flex;gap:8px;margin-left:auto}
+.confirm{font-size:.88rem;color:var(--danger)}
+.hint{font-size:.8rem;color:var(--muted)}
+.periodbar{display:flex;gap:10px;align-items:center;margin-top:4px}
+.periodbar label{font-size:.85rem;color:var(--muted);font-weight:600}
+.periodbar select{min-width:240px}
+table.sortable th{cursor:pointer;user-select:none}
+table.sortable th:hover{color:var(--fg)}
+table.sortable th[data-dir="desc"]::after{content:" ▼";font-size:.7em}
+table.sortable th[data-dir="asc"]::after{content:" ▲";font-size:.7em}
+.custhead h2{font-family:var(--f-display);font-size:1.5rem;margin:0 0 4px}
+.subtabs{margin-top:4px}
+.custbody{display:grid;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.custbody .info{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px 20px;font-size:.95rem}
+.dtable tbody tr,tr[data-prodcust],tr[data-opencustana]{cursor:pointer}
+tr[data-prodcust]:hover,tr[data-opencustana]:hover,tr[data-prod]:hover,tr[data-newprod]:hover{background:var(--chip)}
+tr[data-prod],tr[data-newprod]{cursor:pointer}
+.custbody td,.panel td{white-space:nowrap}
+.dtable tbody tr:hover{background:var(--chip)}
+.dtable td{white-space:nowrap}
+.panel.wide{max-width:1000px}
+.inv{background:#fff;color:#111;border-radius:8px;padding:22px;font-size:13px;line-height:1.35;overflow-x:auto}
+.inv *{color:inherit}
+.inv .ihead{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:2px solid #111;padding-bottom:10px}
+.inv h2{font-family:var(--f-body);font-size:18px;margin:0}
+.inv .disc{font-size:11px;color:#555;margin-top:4px}
+.inv .boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+.inv .box{border:1px solid #999;border-radius:4px;padding:8px 10px}
+.inv .box h3{margin:0 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#444}
+.inv .kv{display:grid;grid-template-columns:max-content 1fr;gap:3px 10px}
+.inv .kv > span:nth-child(odd){white-space:nowrap}
+.inv .kv > span:nth-child(odd)::after{content:":"}
+.inv .tot .kv > span:nth-child(odd)::after{content:""}
+.inv .kv > span:nth-child(odd){color:#555}
+.inv table{border-collapse:collapse;width:100%;font-size:12px}
+.inv th{background:#e5e5e5;color:#222;text-transform:none;letter-spacing:0;font-size:11px}
+.inv th,.inv td{border:1px solid #bbb;padding:5px 6px;white-space:nowrap}
+.inv td.d{white-space:normal;min-width:220px}
+.inv .tot{display:grid;grid-template-columns:1fr 280px;gap:12px;margin-top:12px}
+.inv .tot .kv{border:1px solid #999;padding:8px 10px;border-radius:4px;grid-template-columns:1fr auto}
+.inv .tot .pay{font-weight:700;font-size:14px;border-top:1px solid #999;padding-top:4px}
+@media (max-width:640px){.inv .boxes,.inv .tot{grid-template-columns:1fr}}
+.hrow,.arow{display:grid;gap:6px;align-items:center;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.hrow{grid-template-columns:1.1fr .9fr 1.4fr auto}
+.arow{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+.arow .wide{grid-column:1/-1}
+.dev{color:var(--danger)}
+select.reason{font-size:.82rem;padding:4px 6px}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Αρχείο Τιμολογίων</h1>
+      <p class="sub">Πελάτες, προϊόντα και τιμές από τιμολόγια και δελτία αποστολής.</p>
+    </div>
+    <div class="actions">
+      <button id="exportLines" type="button">CSV γραμμών</button>
+      <button id="exportStats" type="button">CSV στατιστικών</button>
+      <button id="exportCat" type="button">CSV καταλόγου</button>
+      <button id="addDoc" class="primary" type="button">+ Νέο παραστατικό</button>
+    </div>
+  </header>
+  <div class="totals" id="totals"></div>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tabC" aria-selected="true" type="button">Πελάτες</button>
+    <button role="tab" id="tabP" aria-selected="false" type="button">Προϊόντα</button>
+    <button role="tab" id="tabG" aria-selected="false" type="button">Πρακτορεία</button>
+    <button role="tab" id="tabT" aria-selected="false" type="button">Εκκρεμότητες</button>
+    <button role="tab" id="tabA" aria-selected="false" type="button">Ανάλυση</button>
+  </div>
+  <input type="search" id="q" placeholder="Αναζήτηση επωνυμίας, ΑΦΜ, πόλης, προϊόντος…" aria-label="Αναζήτηση">
+  <div class="status" id="status">Φόρτωση…</div>
+  <div class="empty" id="empty" hidden>
+    <strong>Δεν υπάρχουν ακόμα καταχωρίσεις</strong>
+    Στείλε φωτογραφία τιμολογίου ή δελτίου αποστολής στη συνομιλία, ή πάτησε «Νέο παραστατικό».
+  </div>
+  <div class="list" id="custList"></div>
+  <div class="list" id="docList" hidden></div>
+  <div class="list" id="prodList" hidden></div>
+  <div class="list" id="agList" hidden></div>
+  <div class="list" id="todoList" hidden></div>
+  <div class="list" id="anaList" hidden></div>
+</div>
+
+<datalist id="prodNames"></datalist>
+<datalist id="agentNames"></datalist>
+<datalist id="catNames"></datalist>
+<datalist id="targets"></datalist>
+
+<div class="sheet" id="listSheet" hidden>
+  <div class="panel wide"><div class="row"><h2 id="listTitle">Παραστατικά</h2><div class="right"><button type="button" id="listClose">Κλείσιμο</button></div></div><div id="listBody"></div></div>
+</div>
+<div class="sheet" id="viewSheet" hidden>
+  <div class="panel wide"><div class="row"><h2>Παραστατικό</h2><div class="right"><button type="button" class="primary" id="viewPrint">Λήψη για εκτύπωση</button><button type="button" id="viewClose">Κλείσιμο</button></div></div><div id="viewBody"></div></div>
+</div>
+
+<div class="sheet" id="docSheet" hidden>
+  <form class="panel" id="docForm">
+    <h2 id="docTitle">Νέο παραστατικό</h2>
+    <div class="grid">
+      <label>Είδος<select id="d_docType"><option>Τιμολόγιο</option><option>Δελτίο αποστολής</option><option>Τιμολόγιο - Δελτίο αποστολής</option></select></label>
+      <label>Ημερομηνία<input id="d_date" type="date"></label>
+      <label>Αριθμός<input id="d_number"></label>
+      <label>Σκοπός<select id="d_purpose"><option>Πώληση</option><option>Επιστροφή</option></select></label>
+      <label>Σχετ. παραστατικό<input id="d_related" placeholder="π.χ. ΔΑΠ 175 16/10/2026"></label>
+      <label>ΜΑΡΚ<input id="d_mark" inputmode="numeric"></label>
+      <label>ΦΠΑ %<input id="d_vatRate" inputmode="decimal" placeholder="24"></label>
+      <label class="full">Πελάτης<select id="d_customer"></select></label>
+      <label class="full">Τόπος παράδοσης (όπως στο παραστατικό)<input id="d_deliveryAddress" placeholder="π.χ. αποθήκη ή παράρτημα"></label>
+      <label>Πόλη παράδοσης<input id="d_deliveryCity"></label>
+      <label>Παράδοση<select id="d_delivery"><option value="">Προς συμπλήρωση</option><option>Από εμάς</option><option>Πρακτορείο</option><option>Παραλαβή από πελάτη</option></select></label>
+      <label id="agentWrap">Πρακτορείο<input id="d_agent" list="agentNames" placeholder="Όνομα πρακτορείου"></label>
+    </div>
+    <div id="newCust" hidden>
+      <h3>Νέος πελάτης</h3>
+      <div class="grid" id="newCustFields"></div>
+    </div>
+    <h3>Προϊόντα</h3>
+    <div class="phead"><span>Κωδικός</span><span>Ποσ.</span><span>Τιμή/τεμ. €</span><span>Έκπτ. %</span><span></span></div>
+    <div id="lines" style="display:grid;gap:6px"></div>
+    <div><button type="button" class="small" id="addLine">+ Προϊόν</button> <span class="hint">Στο δελτίο αποστολής άφησε την τιμή κενή.</span></div>
+    <label class="full">Σημειώσεις<textarea id="d_notes"></textarea></label>
+    <div class="confirm" id="docConfirm" hidden>Πάτησε ξανά «Διαγραφή» για οριστική διαγραφή.</div>
+    <div class="row">
+      <button type="button" class="danger" id="docDel" hidden>Διαγραφή</button>
+      <div class="right">
+        <button type="button" id="docCancel">Άκυρο</button>
+        <button type="submit" class="primary" id="docSave">Αποθήκευση</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="sheet" id="prodSheet" hidden>
+  <form class="panel" id="prodForm">
+    <h2>Καρτέλα προϊόντος</h2>
+    <div class="grid">
+      <label>Τύπος<select id="p_type"><option value="catalog">Προϊόν καταλόγου</option><option value="special">Ειδική παραγγελία</option></select></label>
+      <label>Κωδικός<input id="p_code"></label>
+      <label class="full">Περιγραφή όπως στο παραστατικό<input id="p_description"></label>
+      <label class="full">Πλήρες όνομα<input id="p_fullName"></label>
+      <label>Κατηγορία<input id="p_category" list="catNames"></label>
+      <label class="full">Ιδιαιτερότητες (χωρισμένες με κόμμα)<input id="p_features" placeholder="π.χ. διπλό πάτημα, αφαιρούμενος πάτος"></label>
+      <label class="full">Αποκλειστικό για πελάτη (δική του σφραγίδα)<input id="p_exclusiveFor" placeholder="κενό = για όλους"></label>
+      <label>Κόστος παραγωγής €<input id="p_costPrice" inputmode="decimal"></label>
+      <label>Υλικό<input id="p_material" placeholder="π.χ. Αλουμίνιο"></label>
+      <label>Σχήμα<select id="p_shape"><option></option><option>Στρογγυλό</option><option>Ορθογώνιο</option><option>Τετράγωνο</option><option>Άλλο</option></select></label>
+      <label>Διάμετρος Ν (εκ.)<input id="p_diameter" inputmode="decimal"></label>
+      <label>Μήκος (εκ.)<input id="p_length" inputmode="decimal"></label>
+      <label>Πλάτος (εκ.)<input id="p_width" inputmode="decimal"></label>
+      <label>Βάθος / ύψος (εκ.)<input id="p_depth" inputmode="decimal"></label>
+      <label>Πάχος (χιλ.)<input id="p_thickness" inputmode="decimal"></label>
+      <label>Μπορντούρα<select id="p_border"><option value="">—</option><option value="yes">Ναι</option><option value="no">Όχι</option></select></label>
+      <label>Κωνικό<select id="p_conical"><option value="">—</option><option value="yes">Ναι</option><option value="no">Όχι</option></select></label>
+      <label>Ανάπτυγμα<input id="p_blank" placeholder="διαστάσεις λαμαρίνας"></label>
+      <label class="full">Σημειώσεις<textarea id="p_notes"></textarea></label>
+      <label class="full" style="flex-direction:row;display:flex;gap:8px;align-items:center"><input type="checkbox" id="p_needsInfo"> Θέλει συμπλήρωση στοιχείων</label>
+    </div>
+    <h3>Τιμή καταλόγου (ιστορικό)</h3>
+    <p class="hint">Κάθε αλλαγή τιμής μπαίνει ως νέα γραμμή με την ημερομηνία από την οποία ισχύει.</p>
+    <div id="hist" style="display:grid;gap:6px"></div>
+    <div><button type="button" class="small" id="addHist">+ Τιμή</button></div>
+    <div class="row"><div class="right">
+      <button type="button" id="prodCancel">Άκυρο</button>
+      <button type="submit" class="primary" id="prodSave">Αποθήκευση</button>
+    </div></div>
+  </form>
+</div>
+
+<div class="sheet" id="agSheet" hidden>
+  <form class="panel" id="agForm">
+    <h2>Πρακτορείο</h2>
+    <div class="grid">
+      <label class="full">Όνομα (όπως το λέμε)<input id="g_name"></label>
+      <label class="full">Επωνυμία<input id="g_legalName"></label>
+      <label>ΑΦΜ<input id="g_afm" inputmode="numeric"></label>
+      <label>ΔΟΥ<input id="g_doy"></label>
+      <label class="full">Διεύθυνση<input id="g_address"></label>
+      <label>Τηλέφωνο<input id="g_phone" inputmode="tel"></label>
+      <label>Fax<input id="g_fax"></label>
+      <label class="full">Email<input id="g_email" inputmode="email"></label>
+      <label class="full">Άλλα καταστήματα<textarea id="g_branches"></textarea></label>
+      <label class="full">Πηγές / σημειώσεις<textarea id="g_sources"></textarea></label>
+    </div>
+    <h3>Πού πηγαίνει</h3>
+    <p class="hint">Μία γραμμή ανά προορισμό. Η περιοχή (νομός ή νησιωτικό σύμπλεγμα) βοηθά την αναζήτηση.</p>
+    <div id="routes" style="display:grid;gap:8px"></div>
+    <div><button type="button" class="small" id="addRoute">+ Προορισμός</button></div>
+    <div class="row"><div class="right">
+      <button type="button" id="agCancel">Άκυρο</button>
+      <button type="submit" class="primary" id="agSave">Αποθήκευση</button>
+    </div></div>
+  </form>
+</div>
+
+<div class="sheet" id="custSheet" hidden>
+  <form class="panel" id="custForm">
+    <h2>Στοιχεία πελάτη</h2>
+    <div class="grid" id="custFields"></div>
+    <h3>Όροι τιμολόγησης</h3>
+    <div class="grid"><label>Βασική έκπτωση %<input id="c_baseDiscount" inputmode="decimal"></label></div>
+    <h3>Ειδικές συμφωνίες</h3>
+    <p class="hint">Για συγκεκριμένο κωδικό ή κατηγορία. Βάλε είτε σταθερή καθαρή τιμή είτε έκπτωση %.</p>
+    <div id="agrs" style="display:grid;gap:8px"></div>
+    <div><button type="button" class="small" id="addAgr">+ Συμφωνία</button></div>
+    <div class="row"><div class="right">
+      <button type="button" id="custCancel">Άκυρο</button>
+      <button type="submit" class="primary" id="custSave">Αποθήκευση</button>
+    </div></div>
+  </form>
+</div>
+
+<div class="sheet" id="loginSheet" hidden>
+  <form class="panel" id="loginForm">
+    <h2 style="margin:0">Σύνδεση με το GitHub</h2>
+    <p class="hint" style="margin:0">Τα δεδομένα διαβάζονται από το ιδιωτικό repository στο GitHub. Βάλε το κλειδί πρόσβασης (token). Αποθηκεύεται μόνο σε αυτή τη συσκευή.</p>
+    <input type="password" id="loginToken" autocomplete="off" placeholder="github_pat_…" aria-label="Κλειδί πρόσβασης GitHub" required>
+    <div class="status err" id="loginErr"></div>
+    <div class="row"><div class="right"><button type="submit" class="primary">Σύνδεση</button></div></div>
+  </form>
+</div>
+
+<script>
+// Data layer: the GitHub repository is the database (one JSON file per record under data/<collection>/).
+(function(){
+  const OWNER = "ElaNte75", REPO = "Invoices", BRANCH = "main";
+  const API = localStorage.getItem("gh_api") || "https://api.github.com";
+  const COLS = { customers:"Πελάτης", documents:"Παραστατικό", products:"Προϊόν", agents:"Πρακτορείο", agentRoutes:"Προορισμός πρακτορείου", todos:"Εκκρεμότητα", priceNotes:"Σημείωση τιμής" };
+  const store = {}, listeners = {};
+  let head = null, loading = null;
+  Object.keys(COLS).forEach(c => { store[c] = new Map(); listeners[c] = []; });
+
+  const token = () => localStorage.getItem("gh_token") || "";
+  function askToken(msg){
+    return new Promise(resolve => {
+      const sheet = document.getElementById("loginSheet"), form = document.getElementById("loginForm");
+      document.getElementById("loginErr").textContent = msg || "";
+      sheet.hidden = false;
+      form.onsubmit = e => { e.preventDefault(); const t = document.getElementById("loginToken").value.trim(); if (!t) return; localStorage.setItem("gh_token", t); sheet.hidden = true; resolve(); };
+    });
+  }
+  async function gql(query, variables){
+    for (;;) {
+      if (!token()) await askToken();
+      const r = await fetch(API + "/graphql", { method:"POST", headers:{ Authorization:"Bearer " + token(), "Content-Type":"application/json" }, body: JSON.stringify({ query, variables }) });
+      if (r.status === 401) { localStorage.removeItem("gh_token"); await askToken("Το κλειδί δεν έγινε δεκτό. Δοκίμασε ξανά."); continue; }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.errors) { const e = new Error((j.errors && j.errors[0] && j.errors[0].message) || ("HTTP " + r.status)); e.gqlErrors = j.errors; if (j.data && j.data.repository === null) { localStorage.removeItem("gh_token"); await askToken("Το κλειδί δεν έχει πρόσβαση στο repository " + OWNER + "/" + REPO + "."); continue; } throw e; }
+      return j.data;
+    }
+  }
+
+  const snap = c => ({ docs: [...store[c].entries()].map(([id, v]) => ({ id, data: () => JSON.parse(JSON.stringify(v)) })) });
+  const emit = c => listeners[c].forEach(l => { try { l.cb(snap(c)); } catch (e) { console.error(e); } });
+
+  async function headOid(){
+    const d = await gql(`query($o:String!,$n:String!,$b:String!){repository(owner:$o,name:$n){ref(qualifiedName:$b){target{oid}}}}`, { o:OWNER, n:REPO, b:"refs/heads/" + BRANCH });
+    return d.repository.ref.target.oid;
+  }
+  async function load(){
+    const oid = await headOid();
+    const d = await gql(`query($o:String!,$n:String!,$x:String!){repository(owner:$o,name:$n){object(expression:$x){... on Tree{entries{name type object{... on Tree{entries{name oid}}}}}}}}`, { o:OWNER, n:REPO, x: oid + ":data" });
+    const files = [];
+    ((d.repository.object && d.repository.object.entries) || []).forEach(dir => {
+      if (dir.type !== "tree" || !store[dir.name]) return;
+      (dir.object.entries || []).forEach(f => { if (f.name.endsWith(".json")) files.push({ c: dir.name, id: f.name.slice(0, -5), oid: f.oid }); });
+    });
+    // One query with every file's text times out on GitHub (HTTP 502), so blobs are fetched by oid in batches.
+    const batches = [];
+    for (let i = 0; i < files.length; i += 150) batches.push(files.slice(i, i + 150));
+    const texts = await Promise.all(batches.map(async batch => {
+      const r = await gql(`query($o:String!,$n:String!){repository(owner:$o,name:$n){${batch.map((f, i) => `f${i}:object(oid:"${f.oid}"){... on Blob{text}}`).join(" ")}}}`, { o:OWNER, n:REPO });
+      return batch.map((f, i) => r.repository["f" + i] && r.repository["f" + i].text);
+    }));
+    Object.keys(store).forEach(c => store[c].clear());
+    texts.flat().forEach((text, i) => {
+      const f = files[i];
+      if (text == null) return;
+      try { store[f.c].set(f.id, JSON.parse(text)); } catch (e) { console.warn("Άκυρο JSON", f.c, f.id); }
+    });
+    head = oid;
+    Object.keys(store).forEach(emit);
+  }
+  function refresh(){ if (!loading) loading = load().catch(err => { console.error(err); listeners.customers.forEach(l => l.fail && l.fail(err)); const st = document.getElementById("status"); if (st) { st.textContent = "Σφάλμα GitHub: " + (err && err.message || err); st.classList.add("err"); } }).finally(() => { loading = null; }); return loading; }
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState !== "visible" || !head || loading) return;
+    try { if (await headOid() !== head) refresh(); } catch (e) {}
+  });
+
+  const sortKeys = v => Array.isArray(v) ? v.map(sortKeys) : (v && typeof v === "object") ? Object.keys(v).sort().reduce((o, k) => (o[k] = sortKeys(v[k]), o), {}) : v;
+  const b64 = s => { const b = new TextEncoder().encode(s); let out = ""; for (let i = 0; i < b.length; i += 0x8000) out += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(out); };
+  const label = v => v && (v.fullName || v.name || (v.number ? "αρ. " + v.number : "") || v.text || "");
+  async function commit(c, id, value){
+    const path = `data/${c}/${id}.json`;
+    const verb = value === null ? "διαγραφή" : store[c].has(id) ? "αλλαγή" : "νέο";
+    const name = label(value || store[c].get(id));
+    const headline = `Από τη σελίδα: ${COLS[c] || c} (${verb})${name ? " · " + String(name).slice(0, 80) : ""}`;
+    const fileChanges = value === null ? { deletions: [{ path }] } : { additions: [{ path, contents: b64(JSON.stringify(sortKeys(value), null, 2) + "\n") }] };
+    for (let attempt = 0; ; attempt++) {
+      if (!head) await refresh();
+      try {
+        const d = await gql(`mutation($i:CreateCommitOnBranchInput!){createCommitOnBranch(input:$i){commit{oid}}}`, { i: { branch: { repositoryNameWithOwner: OWNER + "/" + REPO, branchName: BRANCH }, message: { headline }, expectedHeadOid: head, fileChanges } });
+        head = d.createCommitOnBranch.commit.oid;
+        break;
+      } catch (e) {
+        if (attempt >= 2) throw e;
+        head = await headOid();
+      }
+    }
+    if (value === null) store[c].delete(id); else store[c].set(id, value);
+    emit(c);
+  }
+  const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), b => b.toString(36).padStart(2, "0")).join("").slice(0, 20);
+
+  function collection(c){
+    if (!store[c]) { store[c] = new Map(); listeners[c] = []; COLS[c] = c; }
+    return {
+      onSnapshot(cb, fail){ listeners[c].push({ cb, fail }); if (head) cb(snap(c)); else refresh(); return () => { listeners[c] = listeners[c].filter(l => l.cb !== cb); }; },
+      doc(id){ id = id || newId(); return {
+        id,
+        set: data => commit(c, id, JSON.parse(JSON.stringify(data))),
+        update: part => commit(c, id, Object.assign({}, store[c].get(id) || {}, JSON.parse(JSON.stringify(part)))),
+        delete: () => commit(c, id, null),
+      }; },
+    };
+  }
+  const downloads = { async save({ filename, data }){ const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([data], { type: /\.html?$/.test(filename) ? "text/html;charset=utf-8" : "text/csv;charset=utf-8" })); a.download = filename; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); } };
+  const db = { collection };
+  window.claude = { use: async name => name === "db" ? db : name === "downloads" ? downloads : null };
+})();
+</script>
+
+<script>
+(function(){
+  const CF = [["name","Επωνυμία",1],["tradeName","Διακριτικός τίτλος",1],["profession","Επάγγελμα",1],["activity","Δραστηριότητα (από καταλόγους)",1],["address","Διεύθυνση έδρας (χρέωσης)",1],["city","Πόλη έδρας"],["phone","Τηλέφωνο"],["afm","ΑΦΜ"],["doy","ΔΟΥ"],["website","Ιστοσελίδα"],["notes","Σημειώσεις / πηγές",1]];
+  const $ = id => document.getElementById(id);
+  let db = null, customers = [], docs = [], tab = "C", editingDoc = null, editingCust = null, delArmed = false;
+
+  const num = v => { if (v === "" || v == null) return null; if (typeof v === "number") return v; let s = String(v).replace(/[€\s]/g, ""); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isFinite(n) ? n : null; };
+  const eur = v => v == null ? "–" : v.toLocaleString("el-GR",{minimumFractionDigits:2,maximumFractionDigits:3}) + " €";
+  const qn = v => v == null ? "–" : v.toLocaleString("el-GR",{maximumFractionDigits:3});
+  const dt = s => { if (!s) return "–"; const [y,m,d] = s.split("-"); return d && m && y ? `${d}/${m}/${y}` : s; };
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const key = s => String(s||"").trim().toLowerCase().replace(/\s+/g," ");
+  const lines = d => Array.isArray(d.lines) ? d.lines : [];
+  let catalog = [];
+  // A line links to the catalog by product code; otherwise to a special order by its invoice description.
+  const productFor = l => (l.code && catalog.find(p => p.type !== "special" && key(p.code) === key(l.code))) || catalog.find(p => p.type === "special" && key(p.description) === key(l.product)) || null;
+  const lineKey = l => { const p = productFor(l); return p ? "id:" + p._id : "d:" + key(l.product); };
+  // Uniform casing: unclassified invoice text (ALL CAPS) is shown in sentence case.
+  const pretty = t => { t = String(t || "").trim(); if (!t || /[α-ωά-ώ]/.test(t)) return t; let x = t.toLocaleLowerCase("el").replace(/σ(?=[^α-ωά-ώa-z]|$)/g, "ς").replace(/(\d)\s*[χx]\s*(?=\d)/g, "$1×"); return x.charAt(0).toLocaleUpperCase("el") + x.slice(1); };
+  const lineName = l => { const p = productFor(l); return (p && p.fullName) || pretty(l.product); };
+  const lineCat = l => { const p = productFor(l); return !p ? "Δεν έχει ταξινομηθεί" : p.type === "special" ? "Ειδική κατασκευή" : (p.category || "Χωρίς κατηγορία"); };
+  const yn = v => v === "yes" ? "Ναι" : v === "no" ? "Όχι" : "–";
+  const custOf = id => customers.find(c => c._id === id);
+  function setStatus(t, err){ const s = $("status"); s.textContent = t || ""; s.classList.toggle("err", !!err); }
+
+  const netPrice = l => { const p = num(l.price); if (p == null) return null; return Math.round(p * (1 - (num(l.discount)||0)/100) * 1000) / 1000; };
+  const priceCell = s => s.lastPrice == null ? "–" : eur(s.lastPrice) + (s.lastDisc ? `<br><span class="hint">${eur(s.lastList)} −${qn(s.lastDisc)}%</span>` : "");
+  const pct = (a,b) => b ? (a*100/b).toLocaleString("el-GR",{maximumFractionDigits:1}) + "%" : "–";
+  // Merge every document line per customer + product
+  function statsFor(cid){
+    const map = new Map();
+    docs.filter(d => d.customerId === cid).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).forEach(d => {
+      const seen = new Set(), ret = d.purpose === "Επιστροφή";
+      lines(d).forEach(l => {
+        if (!key(l.product) && !l.code) return;
+        const k = lineKey(l);
+        let s = map.get(k);
+        if (!s) { s = {k, product: (l.product||"").trim(), name: lineName(l), cat: lineCat(l), code: l.code || "", times:0, qty:0, returned:0, unpricedQty:0, unpricedLines:0, value:0, sold:0, firstDate:"", prices:[], lastPrice:null, lastList:null, lastDisc:null, lastVat:24, lastDate:""}; map.set(k, s); }
+        const q = num(l.qty) ?? 0, p = num(l.price);
+        if (ret) { s.returned += q; s.qty -= q; return; }
+        if (!seen.has(k)) { s.times++; seen.add(k); }
+        s.qty += q; s.sold += q; if (!s.firstDate) s.firstDate = d.date || "";
+        if (p == null) { s.unpricedQty += q; s.unpricedLines++; }
+        else { const np = netPrice(l); s.value += np*q; s.prices.push(np); s.lastPrice = np; s.lastList = p; s.lastDisc = num(l.discount) || 0; s.lastVat = num(d.vatRate) ?? 24; }
+        s.lastDate = d.date || s.lastDate;
+      });
+    });
+    return [...map.values()].sort((a,b) => b.qty - a.qty);
+  }
+
+  let priceNotes = [], agents = [], routes = [], todos = [];
+  const REASONS = ["","Αύξηση τιμής","Λάθος τιμολόγησης","Αλλαγή συμφωνίας","Ειδική τιμή / προσφορά","Άλλο"];
+  function listPriceAt(p, date){
+    const h = (Array.isArray(p && p.priceHistory) ? p.priceHistory : []).filter(x => num(x.price) != null && (!date || !x.from || x.from <= date)).sort((a,b)=>String(a.from||"").localeCompare(String(b.from||"")));
+    return h.length ? h[h.length-1] : null;
+  }
+  const agrMatches = (a, p) => a && p && (key(a.target) === key(p.code) || (p.category && key(a.target) === key(p.category)));
+  function activeAgreement(c, p, date){
+    return (Array.isArray(c && c.agreements) ? c.agreements : []).filter(a => a.status !== "Ακυρώθηκε" && agrMatches(a, p) && (!a.from || !date || a.from <= date) && (!a.to || !date || date <= a.to) && (a.status !== "Έληξε" || (a.to && date && date <= a.to)))
+      .sort((a,b)=> (key(b.target)===key(p.code)) - (key(a.target)===key(p.code)))[0] || null;
+  }
+  // What the line should have cost under the price list + this customer's terms on that date.
+  function expected(c, p, date){
+    if (!p || p.type === "special") return null;
+    const lp = listPriceAt(p, date); const ag = activeAgreement(c, p, date);
+    if (ag && num(ag.price) != null) return {net: num(ag.price), list: lp ? num(lp.price) : null, disc: null, basis: "Συμφωνία" + (num(ag.minQty) ? ` (min ${qn(num(ag.minQty))})` : "")};
+    if (!lp) return null;
+    const disc = ag && num(ag.discount) != null ? num(ag.discount) : (num(c && c.baseDiscount) ?? 0);
+    return {net: Math.round(num(lp.price) * (1 - disc/100) * 1000)/1000, list: num(lp.price), disc, basis: ag ? "Συμφωνία" : "Βασική έκπτωση"};
+  }
+  function deviations(){
+    const out = [];
+    docs.forEach(d => { if (d.purpose === "Επιστροφή") return; const c = custOf(d.customerId); lines(d).forEach((l, i) => {
+      const np = netPrice(l); if (np == null) return; const p = productFor(l); const ex = expected(c, p, d.date); if (!ex) return;
+      if (Math.abs(np - ex.net) > 0.009) out.push({d, l, i, c, p, np, ex, noteId: d._id + "_" + i});
+    }); });
+    return out.sort((a,b)=>String(b.d.date||"").localeCompare(String(a.d.date||"")));
+  }
+  const noteFor = id => priceNotes.find(n => n._id === id) || {};
+  function customerPriceTable(c){
+    const rows = catalog.filter(p => p.type !== "special" && listPriceAt(p)).sort((a,b)=>String(a.fullName||a.code).localeCompare(String(b.fullName||b.code),"el",{numeric:true})).map(p => {
+      const today = new Date().toISOString().slice(0,10); const ex = expected(c, p, today);
+      return `<tr><td>${esc(p.fullName || p.description)}<br><span class="hint num">${esc(p.code)}</span></td><td class="r num">${eur(ex && ex.list)}</td><td class="r num">${ex && ex.disc != null ? qn(ex.disc)+"%" : "–"}</td><td class="r num"><b>${eur(ex && ex.net)}</b></td><td>${esc(ex ? ex.basis : "")}</td></tr>`; });
+    return rows.length ? `<details><summary class="hint" style="cursor:pointer">Τιμοκατάλογος πελάτη σήμερα (${rows.length} προϊόντα)</summary>${tbl([["Προϊόν"],["Κατάλογος","r"],["Έκπτ.","r"],["Καθαρή","r"],["Βάση"]], rows)}</details>` : `<p class="hint">Δεν υπάρχουν ακόμα τιμές καταλόγου.</p>`;
+  }
+
+  const deliveryLabel = d => d.delivery === "Πρακτορείο" ? "Πρακτορείο: " + (d.agent || "—") : d.delivery === "" ? "Προς συμπλήρωση" : (d.delivery || "Από εμάς");
+  function countBy(arr, f){ const m = new Map(); arr.forEach(x => { const k = f(x); if (k) m.set(k, (m.get(k)||0) + 1); }); return [...m.entries()].sort((a,b) => b[1]-a[1]); }
+  function deliveryPoints(cd){
+    const m = new Map();
+    cd.filter(d => d.purpose !== "Επιστροφή" && d.deliveryAddress).forEach(d => { const k = fold(d.deliveryAddress + "|" + d.deliveryCity); const x = m.get(k) || {addr: d.deliveryAddress, city: d.deliveryCity, n: 0, ags: new Map()}; x.n++; const a = deliveryLabel(d); x.ags.set(a, (x.ags.get(a)||0) + 1); m.set(k, x); });
+    return [...m.values()].sort((a,b)=>b.n-a.n).map(x => `${esc(x.addr)}${x.city?", "+esc(x.city):""} <span class="num">×${x.n}</span><br><span class="hint">${[...x.ags.entries()].map(([a,n]) => esc(a)+" ×"+n).join(" · ")}</span>`).join("<br>");
+  }
+  function deliverySummary(cd){ const known = cd.filter(d => d.delivery !== "" && d.purpose !== "Επιστροφή"); const rows = countBy(known, deliveryLabel); return rows.map(([k,n], i) => `${i === 0 && rows.length > 1 ? "<b>Συνήθως:</b> " : ""}${esc(k)} <span class="num">×${n}${known.length ? " (" + Math.round(n*100/known.length) + "%)" : ""}</span>`).join("<br>"); }
+  const tbl = (head, rows) => rows.length ? `<div class="tbox"><table><thead><tr>${head.map(h => `<th class="${h[1]||""}">${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>` : `<p class="hint">Δεν υπάρχουν ακόμα δεδομένα.</p>`;
+
+  let anaTab = "sum", anaPeriod = "all";
+  const anaSort = {};
+  const MONTHS = ["Ιανουάριος","Φεβρουάριος","Μάρτιος","Απρίλιος","Μάιος","Ιούνιος","Ιούλιος","Αύγουστος","Σεπτέμβριος","Οκτώβριος","Νοέμβριος","Δεκέμβριος"];
+  const inPeriod = d => anaPeriod === "all" || (anaPeriod[0] === "Y" ? String(d.date||"").slice(0,4) === anaPeriod.slice(1) : String(d.date||"").slice(0,7) === anaPeriod.slice(1));
+  function withPeriod(fn){ const all = docs; docs = all.filter(inPeriod); try { return fn(); } finally { docs = all; } }
+  function periodOptions(){
+    const ym = [...new Set(docs.map(d => String(d.date||"").slice(0,7)).filter(x => /^\d{4}-\d{2}$/.test(x)))].sort().reverse();
+    const ys = [...new Set(ym.map(x => x.slice(0,4)))];
+    const opt = (v,l) => `<option value="${v}" ${anaPeriod===v?"selected":""}>${l}</option>`;
+    return opt("all","Όλη η περίοδος") + ys.map(y => opt("Y"+y, "Έτος " + y) + ym.filter(m => m.startsWith(y)).map(m => opt("M"+m, "  " + MONTHS[+m.slice(5)-1] + " " + y)).join("")).join("");
+  }
+  // Click-to-sort for analysis tables; numbers are read from Greek formatting (1.234,56 € / 14,9%).
+  const cellVal = t => { const x = t.replace(/[€%\s]/g,"").replace(/\./g,"").replace(",","."); return /^[-+]?\d+(\.\d+)?$/.test(x) ? parseFloat(x) : null; };
+  function sortTable(table, col, dir){
+    const tb = table.tBodies[0]; if (!tb) return;
+    const rows = [...tb.rows];
+    rows.sort((a,b) => { const A = a.cells[col]?.textContent.trim() || "", B = b.cells[col]?.textContent.trim() || ""; const na = cellVal(A), nb = cellVal(B);
+      const r = (na != null && nb != null) ? na - nb : A.localeCompare(B, "el", {numeric:true}); return dir === "asc" ? r : -r; });
+    rows.forEach(r => tb.appendChild(r));
+    [...table.tHead.rows[0].cells].forEach((th,i) => { th.dataset.dir = i === col ? dir : ""; });
+  }
+  function applySorts(root, key){
+    root.querySelectorAll("table").forEach((t, i) => { t.classList.add("sortable"); const s = anaSort[key + ":" + i]; if (s) sortTable(t, s.col, s.dir); else { const ths = [...t.tHead.rows[0].cells]; const def = ths.findIndex(th => /% πωλήσεων|% αγορών/.test(th.textContent)); if (def >= 0) sortTable(t, def, "desc"); } t.dataset.sortKey = key + ":" + i; });
+  }
+  function analysisData(){
+    const prodMap = new Map();
+    customers.forEach(c => statsFor(c._id).forEach(s => { const p = prodMap.get(s.k) || {k:s.k, name:s.name, code:s.code, cat:s.cat, qty:0, value:0, list:[]}; p.qty += s.qty; p.value += s.value; p.list.push({c, s}); prodMap.set(s.k, p); }));
+    const prods = [...prodMap.values()];
+    return {prods, totQ: prods.reduce((n,p)=>n+p.qty,0), totV: prods.reduce((n,p)=>n+p.value,0)};
+  }
+  function custValue(cid){ return docs.filter(d => d.customerId === cid && d.purpose !== "Επιστροφή").reduce((a,d) => { const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0); }
+  let periodHTML = "";
+  function renderAnalysis(){ periodHTML = periodOptions(); withPeriod(renderAnalysisInner); applySorts($("anaList"), "ana-" + anaTab); }
+  function renderAnalysisInner(){
+    const {prods, totQ, totV} = analysisData();
+    const sales = docs.filter(d => d.purpose !== "Επιστροφή");
+    const tabs = [["sum","Σύνοψη"],["cust","Πελάτες"],["city","Πόλεις"],["ship","Αποστολές"],["cat","Κατηγορίες"],["prod","Προϊόντα"],["dev","Αποκλίσεις τιμών"]];
+    let body = "";
+    if (anaTab === "sum") {
+      const netAll = sales.reduce((a,d)=>{ const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0);
+      const topC = customers.map(c => ({c, v: custValue(c._id)})).sort((a,b)=>b.v-a.v).slice(0,5);
+      const topP = prods.slice().sort((a,b)=>b.value-a.value).slice(0,5);
+      body = `<div class="info"><div><span>Πελάτες</span><b class="num">${customers.length}</b></div><div><span>Παραγγελίες</span><b class="num">${sales.length}</b></div><div><span>Τεμάχια</span><b class="num">${qn(totQ)}</b></div><div><span>Καθαρή αξία</span><b class="num">${eur(r2(netAll))}</b></div><div><span>Μέση παραγγελία</span><b class="num">${sales.length ? eur(r2(netAll/sales.length)) : "–"}</b></div><div><span>Διαφορετικά προϊόντα</span><b class="num">${prods.length}</b></div></div>
+        <h4>Οι 5 μεγαλύτεροι πελάτες (σε αξία)</h4>${tbl([["Πελάτης"],["Πόλη"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], topC.map(x => `<tr data-opencustana="${esc(x.c._id)}"><td>${nameCell(x.c)}</td><td>${esc(x.c.city)}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${pct(x.v,netAll)}</td></tr>`))}
+        <h4>Τα 5 μεγαλύτερα προϊόντα (σε αξία)</h4>${tbl([["Κωδικός"],["Προϊόν"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], topP.map(p => `<tr><td class="num">${esc(p.code)}</td><td>${esc(p.name)}</td><td class="r num">${qn(p.qty)}</td><td class="r num">${eur(r2(p.value))}</td><td class="r num">${pct(p.value,totV)}</td></tr>`))}`;
+    } else if (anaTab === "cust") {
+      const rows = customers.map(c => { const cs = sales.filter(d => d.customerId === c._id), v = custValue(c._id), q = statsFor(c._id).reduce((a,s)=>a+s.qty,0); return {c, n: cs.length, v, q}; }).sort((a,b)=>b.v-a.v);
+      const tot = rows.reduce((a,x)=>a+x.v,0);
+      body = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["Μέση παραγγελία","r"],["% πωλήσεων","r"]], rows.map(x => `<tr data-opencustana="${esc(x.c._id)}"><td>${nameCell(x.c)}</td><td>${esc(x.c.city)}</td><td class="r num">${x.n}</td><td class="r num">${qn(x.q)}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${x.n ? eur(r2(x.v/x.n)) : "–"}</td><td class="r num">${pct(x.v,tot)}</td></tr>`));
+    } else if (anaTab === "city") {
+      const m = new Map(); customers.forEach(c => { const k = (c.city||"").trim() || "Χωρίς πόλη"; const x = m.get(k) || {n:0, v:0, names:[]}; x.n++; x.v += custValue(c._id); x.names.push(c.name); m.set(k, x); });
+      const tot = [...m.values()].reduce((a,x)=>a+x.v,0);
+      body = tbl([["Πόλη"],["Πελάτες","r"],["% πελατών","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"],["Ποιοι"]], [...m.entries()].sort((a,b)=>b[1].v-a[1].v).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}</td><td class="r num">${pct(x.n,customers.length)}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${pct(x.v,tot)}</td><td>${esc(x.names.join(", "))}</td></tr>`));
+    } else if (anaTab === "ship") {
+      const m = new Map(); sales.forEach(d => { const k = d.delivery === "" ? "Προς συμπλήρωση" : deliveryLabel(d); const x = m.get(k) || {n:0, cust:new Set(), cities:new Set()}; x.n++; x.cust.add(d.customerId); if (d.deliveryCity) x.cities.add(d.deliveryCity); m.set(k, x); });
+      body = tbl([["Αποστολή"],["Παραγγελίες","r"],["% παραγγελιών","r"],["Πελάτες","r"],["Προορισμοί"]], [...m.entries()].sort((a,b)=>b[1].n-a[1].n).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}</td><td class="r num">${pct(x.n,sales.length)}</td><td class="r num">${x.cust.size}</td><td>${esc([...x.cities].join(", "))}</td></tr>`));
+    } else if (anaTab === "cat") {
+      const m = new Map(); prods.forEach(p => { const x = m.get(p.cat) || {n:0, q:0, v:0, cust:new Set()}; x.n++; x.q += p.qty; x.v += p.value; p.list.forEach(y => x.cust.add(y.c._id)); m.set(p.cat, x); });
+      body = tbl([["Κατηγορία"],["Προϊόντα","r"],["Τεμάχια","r"],["% τεμαχίων","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"],["Πελάτες","r"]], [...m.entries()].sort((a,b)=>b[1].v-a[1].v).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}</td><td class="r num">${qn(x.q)}</td><td class="r num">${pct(x.q,totQ)}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${pct(x.v,totV)}</td><td class="r num">${x.cust.size}</td></tr>`));
+    } else if (anaTab === "prod") {
+      body = `<p class="hint">Πάτα ένα προϊόν για να δεις ποιοι πελάτες το παίρνουν και σε τι τιμή.</p>` + tbl([["Κωδικός"],["Προϊόν"],["Κατηγορία"],["Πελάτες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], prods.slice().sort((a,b)=>b.value-a.value).map(p => `<tr data-prodcust="${esc(p.k)}"><td class="num">${esc(p.code)}</td><td>${esc(p.name)}</td><td>${esc(p.cat)}</td><td class="r num">${p.list.length}</td><td class="r num">${qn(p.qty)}</td><td class="r num">${eur(r2(p.value))}</td><td class="r num">${pct(p.value,totV)}</td></tr>`));
+    } else {
+      body = `<p class="hint">Γραμμές όπου η χρέωση διαφέρει από την τιμή καταλόγου με την έκπτωση του πελάτη.</p>` + tbl([["Ημερομηνία"],["Πελάτης"],["Προϊόν"],["Χρεώθηκε","r"],["Αναμενόμενη","r"],["Διαφορά","r"],["Αιτία"]], deviations().map(x => `<tr><td class="num">${dt(x.d.date)}</td><td>${esc(x.c ? x.c.name : "")}</td><td>${esc(lineName(x.l))}</td><td class="r num">${eur(x.np)}</td><td class="r num">${eur(x.ex.net)}</td><td class="r num dev">${(x.np-x.ex.net>0?"+":"")}${eur(Math.round((x.np-x.ex.net)*1000)/1000)}</td><td><select class="reason" data-note="${esc(x.noteId)}" aria-label="Αιτία">${REASONS.map(r => `<option ${noteFor(x.noteId).reason===r?"selected":""} value="${esc(r)}">${r||"—"}</option>`).join("")}</select></td></tr>`));
+    }
+    $("anaList").innerHTML = `<div class="periodbar"><label for="anaPeriod">Περίοδος</label><select id="anaPeriod">${periodHTML}</select></div><div class="tabs subtabs">${tabs.map(([k,l]) => `<button type="button" data-atab="${k}" aria-selected="${anaTab===k}">${l}</button>`).join("")}</div><div class="custbody">${body}</div>`;
+  }
+  function openProdCust(k){ withPeriod(() => openProdCustInner(k)); applySorts($("listBody"), "prodcust"); }
+  function openProdCustInner(k){
+    const p = analysisData().prods.find(x => x.k === k); if (!p) return;
+    $("listTitle").textContent = p.name + (anaPeriod === "all" ? "" : " · " + $("anaPeriod").selectedOptions[0].textContent.trim());
+    $("listBody").innerHTML = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Τιμή χωρίς ΦΠΑ","r"],["Με έκπτωση","r"],["Με ΦΠΑ","r"]], p.list.sort((a,b)=>b.s.qty-a.s.qty).map(({c,s}) => `<tr><td>${nameCell(c)}</td><td>${esc(c.city)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${eur(s.lastPrice)}${s.lastDisc ? ` <span class="hint">(−${qn(s.lastDisc)}%)</span>` : ""}</td><td class="r num">${s.lastPrice != null ? eur(r2(s.lastPrice*(1+s.lastVat/100))) : "–"}</td></tr>`));
+    $("listSheet").hidden = false;
+  }
+  const nameCell = c => `<b>${esc(c.name)}</b>${c.tradeName ? ` <span class="hint">(${esc(c.tradeName)})</span>` : ""}`;
+  function usage(){
+    const u = new Map();
+    docs.forEach(d => { const ret = d.purpose === "Επιστροφή"; lines(d).forEach(l => {
+      if (!l.product && !l.code) return;
+      const k = lineKey(l); const x = u.get(k) || {k, desc:(l.product||"").trim(), code:l.code||"", docs:new Set(), qty:0, value:0, cust:new Set(), prices:[]};
+      const q = num(l.qty) ?? 0;
+      if (ret) x.qty -= q; else { x.docs.add(d._id); x.qty += q; x.cust.add(d.customerId); const np = netPrice(l); if (np != null) { x.value += np*q; x.prices.push(np); } }
+      u.set(k, x); }); });
+    return u;
+  }
+  const dim = p => [p.diameter!=null&&p.diameter!==""?`Ν${qn(num(p.diameter))}`:"", p.length?`${qn(num(p.length))}×${qn(num(p.width))}`:"", p.depth?`βάθος ${qn(num(p.depth))} εκ.`:"", p.thickness?`πάχος ${qn(num(p.thickness))} χιλ.`:""].filter(Boolean).join(" · ");
+  function prodCard(p, x){
+    const use = x ? `<div class="meta"><span>Δόθηκε ${x.docs.size} φορές</span><span>${qn(x.qty)} τεμ.</span>${x.value?`<span>Χρέωση ${eur(x.value)}</span>`:""}${x.prices.length?`<span>Τιμή ${Math.min(...x.prices)===Math.max(...x.prices)?eur(x.prices[0]):eur(Math.min(...x.prices))+" – "+eur(Math.max(...x.prices))}</span>`:""}<span>${x.cust.size} πελάτες</span></div>` : `<div class="meta"><span>Δεν έχει δοθεί ακόμα</span></div>`;
+    return `<button type="button" class="docitem" ${p._id?`data-prod="${esc(p._id)}"`:`data-newprod="${esc(x.k)}"`}>
+      <div class="top"><span class="name">${esc(p.fullName || pretty(p.description || x.desc))}</span>${p.exclusiveFor?`<span class="badge">Μόνο: ${esc(p.exclusiveFor)}</span>`:""}${!p._id?`<span class="badge warn">Δεν έχει ταξινομηθεί</span>`:p.needsInfo?`<span class="badge warn">Προς συμπλήρωση</span>`:""}</div>
+      <div class="meta"><span class="num">${esc(p.code || (x&&x.code) || "")}</span>${p.type==="special"||!p._id?`<span>${esc(p.description || x.desc)}</span>`:""}${listPriceAt(p)?`<span>Κατάλογος ${eur(num(listPriceAt(p).price))}</span>`:""}${dim(p)?`<span>${dim(p)}</span>`:""}${p.material?`<span>${esc(p.material)}</span>`:""}${p.border?`<span>Μπορντούρα: ${yn(p.border)}</span>`:""}${p.conical?`<span>Κωνικό: ${yn(p.conical)}</span>`:""}</div>
+      ${use}${p.notes?`<div class="lines">${esc(p.notes)}</div>`:""}</button>`;
+  }
+  function lastInvoicedPrice(match){
+    let best = null;
+    docs.forEach(d => { if (d.purpose === "Επιστροφή") return; lines(d).forEach(l => { if (num(l.price) != null && match(l) && (!best || String(d.date) >= String(best.date))) best = {date: d.date, price: num(l.price)}; }); });
+    return best ? best.price : null;
+  }
+  let prodCat = "all", prodFeat = "all";
+  function renderCatalog(q){
+    const u = usage();
+    const rows = [];
+    catalog.forEach(p => { const lp = listPriceAt(p); const price = lp ? num(lp.price) : lastInvoicedPrice(l => productFor(l) === p);
+      rows.push({id: p._id, feats: Array.isArray(p.features) ? p.features : [], size: sizeKey(p.fullName || p.description, p), code: p.code, name: (p.fullName || pretty(p.description)) + (p.unit ? ` (τιμή ανά ${p.unit})` : ""), cat: p.type === "special" ? "Ειδική κατασκευή" : (p.category || "Χωρίς κατηγορία"), cost: num(p.costPrice), price}); });
+    [...u.values()].filter(x => x.k.startsWith("d:")).forEach(x => rows.push({id: "", nk: x.k, feats: [], size: sizeKey(x.desc), code: x.code, name: pretty(x.desc), cat: "Δεν έχει ταξινομηθεί", cost: null, price: lastInvoicedPrice(l => lineKey(l) === x.k)}));
+    const cats = countBy(rows, r => r.cat).sort((a,b) => a[0].localeCompare(b[0], "el"));
+    if (prodCat !== "all" && !cats.some(([c]) => c === prodCat)) prodCat = "all";
+    const feats = countBy(rows.flatMap(r => r.feats), f => f).sort((a,b) => a[0].localeCompare(b[0], "el"));
+    if (prodFeat !== "all" && !feats.some(([f]) => f === prodFeat)) prodFeat = "all";
+    const list = rows.filter(r => (prodCat === "all" || r.cat === prodCat) && (prodFeat === "all" || r.feats.includes(prodFeat)) && (!q || [r.code, r.name, r.cat].some(v => key(v).includes(q)))).sort((a,b) => a.cat.localeCompare(b.cat, "el") || cmpSize(a.size, b.size) || a.name.localeCompare(b.name, "el", {numeric:true}));
+    $("prodList").innerHTML = `<div class="periodbar"><label for="prodCat">Κατηγορία</label><select id="prodCat"><option value="all">Όλες οι κατηγορίες (${rows.length})</option>${cats.map(([c,n]) => `<option value="${esc(c)}" ${prodCat===c?"selected":""}>${esc(c)} (${n})</option>`).join("")}</select><label for="prodFeat">Ιδιαιτερότητα</label><select id="prodFeat"><option value="all">Όλες</option>${feats.map(([f,n]) => `<option value="${esc(f)}" ${prodFeat===f?"selected":""}>${esc(f)} (${n})</option>`).join("")}</select></div><div class="custbody"><p class="hint">Η τιμή πώλησης είναι η αρχική, πριν από την έκπτωση κάθε πελάτη. Το κόστος παραγωγής θα συμπληρωθεί όταν έχουμε τα στοιχεία.</p>${tbl([["Κωδικός"],["Προϊόν"],["Ιδιαιτερότητες"],["Κατηγορία"],["Κόστος παραγωγής","r"],["Τιμή πώλησης","r"],["Με ΦΠΑ 24%","r"]],
+      list.map(r => `<tr ${r.id ? `data-prod="${esc(r.id)}"` : `data-newprod="${esc(r.nk)}"`}><td class="num">${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.feats.join(", "))}</td><td>${esc(r.cat)}</td><td class="r num">${r.cost != null ? eur(r.cost) : "–"}</td><td class="r num">${eur(r.price)}</td><td class="r num"><b>${r.price != null ? eur(r2(r.price * 1.24)) : "–"}</b></td></tr>`))}
+      </div>`;
+    applySorts($("prodList"), "products");
+    fitProd();
+  }
+  // Logical order inside a category: main size (Φ, Μ, Νο), then width, then height.
+  const dnum = t => t == null || t === "" ? null : num(String(t).replace(",", "."));
+  function sizeKey(name, p){
+    p = p || {}; const t = String(name || "");
+    let a = dnum(p.diameter) ?? dnum(p.length);
+    if (a == null) { const m = t.match(/(?:Νο|Ν|Φ|Μ|πλευρά\s*)(\d+(?:[.,]\d+)?)/i) || t.match(/(\d+(?:[.,]\d+)?)\s*[×χxΧX]/); a = m ? dnum(m[1]) : null; }
+    const w = dnum(p.width), h = dnum(p.depth);
+    return [a, w ?? 0, h ?? 0];
+  }
+  const cmpSize = (x, y) => { for (let i = 0; i < 3; i++) { const a = x[i], b = y[i]; if (a === b) continue; if (a == null) return 1; if (b == null) return -1; return a - b; } return 0; };
+  // Products table scrolls on its own; header, tabs, filter and column titles stay put.
+  function fitProd(){ const box = $("prodList").querySelector(".tbox"); if (!box || $("prodList").hidden) return; box.style.maxHeight = ""; const top = box.getBoundingClientRect().top + window.scrollY; box.style.maxHeight = Math.max(240, window.innerHeight - top - 64) + "px"; }
+  window.addEventListener("resize", fitProd);
+  const PF = ["type","code","description","fullName","category","exclusiveFor","costPrice","material","shape","diameter","length","width","depth","thickness","border","conical","blank","notes"];
+  let editingProd = null;
+  function openProd(id, preset){
+    editingProd = id;
+    const p = (id && catalog.find(x => x._id === id)) || preset || {};
+    PF.forEach(k => { const v = p[k]; $("p_"+k).value = v == null ? "" : (typeof v === "number" ? String(v).replace(".", ",") : v); });
+    if (!$("p_type").value) $("p_type").value = "catalog";
+    $("p_needsInfo").checked = !!p.needsInfo; $("p_features").value = (Array.isArray(p.features) ? p.features : []).join(", ");
+    $("hist").innerHTML = ""; (Array.isArray(p.priceHistory) ? p.priceHistory : []).forEach(addHist);
+    $("prodSheet").hidden = false;
+  }
+  function addHist(h){
+    const d = document.createElement("div"); d.className = "hrow";
+    d.innerHTML = `<input type="date" class="hf" aria-label="Ισχύει από" value="${esc(h&&h.from)}"><input class="hp" inputmode="decimal" placeholder="Τιμή €" aria-label="Τιμή καταλόγου" value="${esc(h&&h.price!=null?String(h.price).replace(".",","):"")}"><input class="hs" placeholder="Πηγή (π.χ. τιμοκατάλογος)" aria-label="Πηγή" value="${esc(h&&h.source)}"><button type="button" aria-label="Αφαίρεση">✕</button>`;
+    d.querySelector("button").onclick = () => d.remove(); $("hist").appendChild(d);
+  }
+  $("addHist").onclick = () => addHist(null);
+  $("prodCancel").onclick = () => { $("prodSheet").hidden = true; };
+  $("prodForm").addEventListener("submit", async e => {
+    e.preventDefault(); if (!db) return;
+    const data = {};
+    PF.forEach(k => { const v = $("p_"+k).value.trim(); data[k] = ["diameter","length","width","depth","thickness","costPrice"].includes(k) ? num(v) : v; });
+    const prev = (editingProd && catalog.find(x => x._id === editingProd)) || {};
+    if (data.type === "catalog" && !data.code && !data.fullName) return setStatus("Το προϊόν χρειάζεται κωδικό ή όνομα.", true);
+    if (data.type === "special" && !data.description) return setStatus("Η ειδική παραγγελία χρειάζεται την περιγραφή του παραστατικού.", true);
+    const dup = catalog.find(p => p._id !== editingProd && (data.type === "catalog" ? (data.code ? p.type !== "special" && key(p.code) === key(data.code) : key(p.fullName) === key(data.fullName)) : p.type === "special" && key(p.description) === key(data.description)));
+    if (dup) return setStatus("Υπάρχει ήδη καρτέλα: " + (dup.fullName || dup.code), true);
+    data.priceHistory = [...$("hist").querySelectorAll(".hrow")].map(r => ({from: r.querySelector(".hf").value, price: num(r.querySelector(".hp").value), source: r.querySelector(".hs").value.trim()})).filter(h => h.price != null).sort((a,b)=>String(a.from).localeCompare(String(b.from)));
+    data.needsInfo = $("p_needsInfo").checked; data.updatedAt = new Date().toISOString();
+    data.features = $("p_features").value.split(",").map(x => x.trim()).filter(Boolean);
+    ["catalogRef","catalogPage","unit","minQty"].forEach(k => { if (prev[k] != null && prev[k] !== "") data[k] = prev[k]; });
+    $("prodSave").disabled = true;
+    try { const col = db.collection("products"); await (editingProd ? col.doc(editingProd) : col.doc()).set(data); $("prodSheet").hidden = true; setStatus("Αποθηκεύτηκε."); }
+    catch { setStatus("Η αποθήκευση απέτυχε.", true); } finally { $("prodSave").disabled = false; }
+  });
+
+  const fold = s => key(s).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ς/g, "σ");
+  const agentOf = name => agents.find(a => fold(a.name) === fold(name));
+  function renderAgents(q){
+    const fq = fold(q);
+    // Evidence from our own shipments: agent used for a customer in a city
+    const shipped = new Map();
+    docs.filter(d => d.delivery === "Πρακτορείο" && d.agent).forEach(d => { const c = custOf(d.customerId) || {}; const a = agentOf(d.agent); const city = d.deliveryCity || c.city || ""; const k = (a ? a._id : d.agent) + "|" + fold(city); const x = shipped.get(k) || {agent: a ? a.name : d.agent, aid: a && a._id, city, n: 0, cust: new Set()}; x.n++; x.cust.add(c.name); shipped.set(k, x); });
+    let hits = "";
+    if (fq) {
+      const r = routes.filter(x => fold(x.area).includes(fq) || fold(x.region).includes(fq));
+      const sh = [...shipped.values()].filter(x => fold(x.city).includes(fq));
+      const byAgent = new Map();
+      r.forEach(x => { const a = agents.find(g => g._id === x.agentId) || {name: "?"}; const e = byAgent.get(a._id || a.name) || {a, areas: [], used: null}; e.areas.push(x); byAgent.set(a._id || a.name, e); });
+      sh.forEach(x => { const k = x.aid || x.agent; const e = byAgent.get(k) || {a: agents.find(g => g._id === x.aid) || {name: x.agent}, areas: [], used: null}; e.used = (e.used || 0) + x.n; byAgent.set(k, e); });
+      hits = `<h4>Πρακτορεία για «${esc(q)}»</h4>` + (byAgent.size ? tbl([["Πρακτορείο"],["Προορισμοί"],["Τηλέφωνο"],["Δικές μας αποστολές","r"]], [...byAgent.values()].sort((a,b)=>(b.used||0)-(a.used||0)).map(e => `<tr><td><b>${esc(e.a.name)}</b><br><span class="hint">${esc(e.a.address)}</span></td><td>${e.areas.map(x => esc(x.area) + (x.region ? ` <span class="hint">(${esc(x.region)})</span>` : "")).join("<br>") || "–"}</td><td class="num">${esc(e.a.phone)}</td><td class="r num">${e.used || "–"}</td></tr>`)) : `<p class="hint">Κανένα γνωστό πρακτορείο για αυτή την περιοχή ακόμα.</p>`);
+    }
+    $("agList").innerHTML = `<p class="hint">Γράψε μια περιοχή στην αναζήτηση (π.χ. Πάτρα, Κως, Δωδεκάνησα) για να δεις ποια πρακτορεία πάνε εκεί.</p>${hits}
+      <div><button type="button" class="small" id="newAgent">+ Νέο πρακτορείο</button></div>
+      <h4>Όλα τα πρακτορεία (${agents.length})</h4>` + (agents.length ? agents.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),"el")).map(a => {
+        const ar = routes.filter(x => x.agentId === a._id).sort((x,y)=>String(x.region+x.area).localeCompare(String(y.region+y.area),"el"));
+        const used = [...shipped.values()].filter(x => x.aid === a._id);
+        return `<button type="button" class="docitem" data-agent="${esc(a._id)}"><div class="top"><span class="name">${esc(a.name)}</span><span class="badge">${ar.length} προορισμοί</span></div>
+          <div class="meta">${a.legalName?`<span>${esc(a.legalName)}</span>`:""}${a.afm?`<span class="num">ΑΦΜ ${esc(a.afm)}</span>`:""}${a.doy?`<span>ΔΟΥ ${esc(a.doy)}</span>`:""}</div>
+          <div class="meta"><span>${esc(a.address)}</span>${a.phone?`<span class="num">Τηλ. ${esc(a.phone)}</span>`:""}${a.fax?`<span class="num">Fax ${esc(a.fax)}</span>`:""}</div>
+          ${ar.length?`<div class="lines">Πηγαίνει: ${ar.map(x => esc(x.area)).join(", ")}</div>`:""}
+          ${used.length?`<div class="lines">Το χρησιμοποιήσαμε: ${used.map(x => `${esc(x.city)} ×${x.n}`).join(", ")}</div>`:""}
+          ${a.email?`<div class="lines">Email: ${esc(a.email)}</div>`:""}${a.branches?`<div class="lines">Καταστήματα: ${esc(a.branches)}</div>`:""}${a.sources?`<div class="lines hint">${esc(a.sources)}</div>`:""}</button>`; }).join("") : `<p class="hint">Δεν υπάρχουν ακόμα πρακτορεία.</p>`);
+    const nb = $("newAgent"); if (nb) nb.onclick = () => openAgent(null);
+  }
+  const GF = ["name","legalName","afm","doy","address","phone","fax","email","branches","sources"];
+  let editingAgent = null;
+  function addRoute(r){
+    const d = document.createElement("div"); d.className = "arow"; if (r && r._id) d.dataset.id = r._id;
+    d.innerHTML = `<label>Προορισμός<input class="ra" value="${esc(r&&r.area)}" placeholder="π.χ. Πάτρα"></label><label>Περιοχή<input class="rr" value="${esc(r&&r.region)}" placeholder="π.χ. Αχαΐα"></label><label>Πηγή<input class="rs" value="${esc(r&&r.source)}" placeholder="π.χ. σφραγίδα, site, τηλέφωνο"></label><div><button type="button" class="small danger">Αφαίρεση</button></div>`;
+    d.querySelector("button").onclick = () => { d.hidden = true; d.dataset.removed = "1"; }; $("routes").appendChild(d);
+  }
+  $("addRoute").onclick = () => addRoute(null);
+  function openAgent(id){
+    editingAgent = id; const a = agents.find(x => x._id === id) || {};
+    GF.forEach(k => $("g_"+k).value = a[k] || "");
+    $("routes").innerHTML = ""; routes.filter(x => x.agentId === id).forEach(addRoute);
+    $("agSheet").hidden = false;
+  }
+  $("agCancel").onclick = () => { $("agSheet").hidden = true; };
+  $("agForm").addEventListener("submit", async e => {
+    e.preventDefault(); if (!db) return;
+    const data = {}; GF.forEach(k => data[k] = $("g_"+k).value.trim());
+    if (!data.name) return setStatus("Δώσε όνομα πρακτορείου.", true);
+    data.updatedAt = new Date().toISOString();
+    $("agSave").disabled = true;
+    try {
+      const ref = editingAgent ? db.collection("agents").doc(editingAgent) : db.collection("agents").doc();
+      const body = Object.assign({}, agents.find(x => x._id === editingAgent) || {}, data); delete body._id; await ref.set(body);
+      for (const row of $("routes").querySelectorAll(".arow")) {
+        const id = row.dataset.id;
+        if (row.dataset.removed) { if (id) await db.collection("agentRoutes").doc(id).delete(); continue; }
+        const r = {agentId: ref.id, area: row.querySelector(".ra").value.trim(), region: row.querySelector(".rr").value.trim(), source: row.querySelector(".rs").value.trim(), updatedAt: data.updatedAt};
+        if (!r.area) continue;
+        await (id ? db.collection("agentRoutes").doc(id) : db.collection("agentRoutes").doc()).set(r);
+      }
+      $("agSheet").hidden = true; setStatus("Αποθηκεύτηκε.");
+    } catch { setStatus("Η αποθήκευση απέτυχε.", true); } finally { $("agSave").disabled = false; }
+  });
+
+  // Open items: checked automatically from the data, plus notes added by hand.
+  const pend = v => /προς επιβεβαίωση|κομμένο/i.test(String(v||""));
+  function issuesFor(scope, id){
+    const out = [];
+    if (scope === "customer") {
+      const c = custOf(id) || {};
+      [["phone","Τηλέφωνο"],["address","Διεύθυνση"],["city","Πόλη"],["afm","ΑΦΜ"],["doy","ΔΟΥ"]].forEach(([k,l]) => { if (!c[k]) out.push(l + ": λείπει"); else if (pend(c[k])) out.push(l + ": ελλιπές ή προς επιβεβαίωση"); });
+      if (num(c.baseDiscount) == null) out.push("Βασική έκπτωση: άγνωστη");
+    } else if (scope === "agent") {
+      const a = agents.find(x => x._id === id) || {};
+      [["legalName","Επωνυμία"],["afm","ΑΦΜ"],["doy","ΔΟΥ"],["address","Διεύθυνση"],["phone","Τηλέφωνο"]].forEach(([k,l]) => { if (!a[k]) out.push(l + ": λείπει"); else if (pend(a[k]) || /ξεθωριασμ/i.test(a[k])) out.push(l + ": προς επιβεβαίωση"); });
+    } else if (scope === "document") {
+      const d = docs.find(x => x._id === id) || {};
+      if (d.purpose !== "Επιστροφή" && d.delivery === "") out.push("Τρόπος παράδοσης / πρακτορείο: άγνωστο");
+      if (d.delivery === "Πρακτορείο" && !d.agent) out.push("Όνομα πρακτορείου: λείπει");
+      if (d.purpose !== "Επιστροφή" && !d.deliveryAddress) out.push("Τόπος παράδοσης: λείπει");
+      if (!d.mark && d.docType !== "Δελτίο αποστολής") out.push("ΜΑΡΚ: λείπει");
+    }
+    todos.filter(t => t.scope === scope && t.refId === id && t.status !== "done").forEach(t => out.push({manual: true, id: t._id, text: t.text}));
+    return out;
+  }
+  // Everything open that a new document from this customer should remind us of.
+  function issuesForCustomer(cid){
+    const groups = [];
+    const c = custOf(cid); if (!c) return groups;
+    const ci = issuesFor("customer", cid); if (ci.length) groups.push({title: "Πελάτης", items: ci});
+    docs.filter(d => d.customerId === cid).forEach(d => { const di = issuesFor("document", d._id); if (di.length) groups.push({title: `${d.docType} ${d.number || ""} (${dt(d.date)})`, items: di}); });
+    const ags = new Set(docs.filter(d => d.customerId === cid && d.agent).map(d => (agentOf(d.agent) || {})._id).filter(Boolean));
+    ags.forEach(id => { const ai = issuesFor("agent", id); if (ai.length) groups.push({title: "Πρακτορείο " + (agents.find(a => a._id === id) || {}).name, items: ai}); });
+    return groups;
+  }
+  const issueHTML = it => typeof it === "string" ? `<div class="issue"><span>${esc(it)}</span></div>` : `<div class="issue"><span>${esc(it.text)} <span class="hint">(σημείωση)</span></span><button type="button" class="small" data-done="${esc(it.id)}">Έγινε</button></div>`;
+  function renderTodos(q){
+    const blocks = [];
+    customers.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),"el")).forEach(c => {
+      if (q && !key(c.name).includes(q) && !key(c.city).includes(q)) return;
+      const g = issuesForCustomer(c._id); if (!g.length) return;
+      blocks.push(`<details class="cust"><summary><div class="top"><span class="name">${esc(c.name)}</span><span class="badge warn">${g.reduce((n,x)=>n+x.items.length,0)}</span></div><div class="meta"><span>${esc(c.city)}</span></div></summary><div class="body">${g.map(x => `<h4>${esc(x.title)}</h4>${x.items.map(issueHTML).join("")}`).join("")}</div></details>`);
+    });
+    const agOnly = agents.filter(a => !q || key(a.name).includes(q)).map(a => ({a, i: issuesFor("agent", a._id)})).filter(x => x.i.length);
+    const prod = catalog.filter(p => p.needsInfo).map(p => `<div class="issue"><span>${esc(p.fullName || p.description)}: ${esc(p.notes || "θέλει συμπλήρωση")}</span></div>`);
+    const unk = [...usage().values()].filter(x => x.k.startsWith("d:")).length;
+    const gen = todos.filter(t => t.scope === "general" && t.status !== "done").map(t => issueHTML({manual: true, id: t._id, text: t.text}));
+    $("todoList").innerHTML = `<p class="hint">Όταν έρχεται νέο παραστατικό από έναν πελάτη, ελέγχονται όσα εκκρεμούν γι' αυτόν, τα παραστατικά του και τα πρακτορεία του.</p>
+      <h4>Ανά πελάτη</h4>${blocks.join("") || `<p class="hint">Τίποτα σε εκκρεμότητα.</p>`}
+      <h4>Πρακτορεία</h4>${agOnly.map(x => `<details class="cust"><summary><div class="top"><span class="name">${esc(x.a.name)}</span><span class="badge warn">${x.i.length}</span></div></summary><div class="body">${x.i.map(issueHTML).join("")}</div></details>`).join("") || `<p class="hint">Τίποτα σε εκκρεμότητα.</p>`}
+      <h4>Προϊόντα</h4>${prod.join("")}${unk ? `<div class="issue"><span>${unk} προϊόντα χωρίς καρτέλα (κατάλογος ή ειδική παραγγελία;)</span></div>` : ""}${!prod.length && !unk ? `<p class="hint">Τίποτα σε εκκρεμότητα.</p>` : ""}
+      ${gen.length ? `<h4>Γενικά</h4>${gen.join("")}` : ""}`;
+  }
+
+  const r2 = x => Math.round(x * 100) / 100;
+  function docTotals(d){
+    let qty = 0, gross = 0, disc = 0, priced = false;
+    const rows = lines(d).map(l => { const q = num(l.qty) ?? 0, p = num(l.price), dp = num(l.discount) || 0; qty += q;
+      if (p == null) return {l, q, p: null, dv: null, net: null};
+      priced = true; const g = r2(q * p), dv = Math.floor(q * p * dp + 1e-9) / 100, net = r2(g - dv); gross += g; disc += dv; return {l, q, p, dp, dv, net}; });
+    const net = r2(gross - disc), vr = num(d.vatRate) ?? 24, vat = r2(net * vr / 100);
+    return {rows, qty, gross: r2(gross), disc: r2(disc), net, vr, vat, pay: r2(net + vat), priced};
+  }
+  function docTable(list, withCustomer){
+    const rows = list.slice().sort((a,b) => String(b.date||"").localeCompare(String(a.date||"")) || String(b.number||"").localeCompare(String(a.number||""), "el", {numeric:true})).map(d => {
+      const c = custOf(d.customerId) || {}, t = docTotals(d), ret = d.purpose === "Επιστροφή";
+      return `<tr data-view="${esc(d._id)}"><td class="num">${dt(d.date)}${ret ? ' <span class="badge ret">Επιστροφή</span>' : ""}</td>${withCustomer ? `<td>${esc(c.name)}</td><td>${esc(d.deliveryCity || c.city)}</td>` : ""}<td>${esc(deliveryLabel(d))}</td><td class="r num">${qn(t.qty)}</td><td class="r num">${t.priced ? eur(t.net) : "–"}</td><td class="r num"><b>${t.priced ? eur(t.pay) : "–"}</b></td></tr>`; });
+    return rows.length ? `<div class="tbox"><table class="dtable"><thead><tr><th>Ημερομηνία</th>${withCustomer ? "<th>Πελάτης</th><th>Πόλη</th>" : ""}<th>Αποστολή</th><th class="r">Τεμάχια</th><th class="r">Καθαρή αξία</th><th class="r">Πληρωτέο</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>` : `<p class="hint">Δεν υπάρχουν παραστατικά.</p>`;
+  }
+  function custAgents(cid){
+    return countBy(docs.filter(x => x.customerId === cid && x.delivery === "Πρακτορείο" && x.agent), x => x.agent).map(([a,n], i) => `${i+1}. ${esc(a)} <span style="color:#666">(×${n})</span>`).join(" · ");
+  }
+  function invoiceHTML(d){
+    const c = custOf(d.customerId) || {}, t = docTotals(d);
+    const kv = pairs => `<div class="kv">${pairs.filter(p => p[1]).map(([k,v]) => `<span>${k}</span><span>${esc(v)}</span>`).join("")}</div>`;
+    return `<div class="inv">
+      <div class="boxes"><div class="box"><h3>Στοιχεία πελάτη</h3>${kv([["Επωνυμία",c.name],["Διεύθυνση",c.address],["Πόλη",c.city],["Τηλέφωνο",c.phone],["Επάγγελμα",c.profession],["ΑΦΜ",c.afm],["ΔΟΥ",c.doy]])}</div>
+        <div class="box"><h3>Στοιχεία αποστολής</h3>${kv([["Διεύθυνση αποστολής",[d.deliveryAddress,d.deliveryCity].filter(Boolean).join(", ")],["Αποστολή",deliveryLabel(d)],["Σκοπός",d.purpose || "Πώληση"]]).replace(/<\/div>$/, custAgents(d.customerId) ? `<span>Πρακτορεία πελάτη</span><span>${custAgents(d.customerId)}</span></div>` : "</div>")}</div></div>
+      <table><thead><tr><th>Κωδικός</th><th>Περιγραφή</th><th>ΜΜ</th><th class="r">Ποσ.</th><th class="r">Τιμή</th><th class="r">Έκπτ. %</th><th class="r">Αξία έκπτ.</th><th class="r">Καθαρή αξία</th><th class="r">ΦΠΑ %</th></tr></thead><tbody>
+      ${t.rows.map(r => `<tr><td>${esc(r.l.code)}</td><td class="d">${esc(r.l.product)}</td><td>Τεμ.</td><td class="r">${qn(r.q)}</td><td class="r">${r.p == null ? "" : r.p.toLocaleString("el-GR",{minimumFractionDigits:2})}</td><td class="r">${r.p == null ? "" : qn(r.dp || 0) + " %"}</td><td class="r">${r.p == null ? "" : r.dv.toLocaleString("el-GR",{minimumFractionDigits:2})}</td><td class="r">${r.net == null ? "" : r.net.toLocaleString("el-GR",{minimumFractionDigits:2})}</td><td class="r">${qn(t.vr)}</td></tr>`).join("")}
+      </tbody></table>
+      <div class="tot"><div></div><div class="kv"><span>Συνολική ποσότητα</span><span class="r">${qn(t.qty)}</span>${t.priced ? `<span>Αξία προ εκπτώσεων</span><span>${eur(t.gross)}</span><span>Συνολική έκπτωση</span><span>${eur(t.disc)}</span><span>Καθαρή αξία</span><span>${eur(t.net)}</span><span>ΦΠΑ ${qn(t.vr)}%</span><span>${eur(t.vat)}</span><span class="pay">ΠΛΗΡΩΤΕΟ</span><span class="pay">${eur(t.pay)}</span>` : `<span>Χωρίς τιμές</span><span></span>`}</div></div>
+    </div>`;
+  }
+  let viewing = null;
+  function openView(id){ viewing = docs.find(x => x._id === id); if (!viewing) return; $("viewBody").innerHTML = invoiceHTML(viewing); $("viewSheet").hidden = false; }
+  function openCustDocs(cid){ const c = custOf(cid) || {}; $("listTitle").textContent = "Παραστατικά · " + (c.name || ""); $("listBody").innerHTML = docTable(docs.filter(d => d.customerId === cid), false); $("listSheet").hidden = false; }
+  $("listClose").onclick = () => { $("listSheet").hidden = true; };
+  $("viewClose").onclick = () => { $("viewSheet").hidden = true; };
+  $("viewPrint").onclick = async () => {
+    if (!viewing) return;
+    const dl = await claude.use("downloads");
+    if (!dl) return setStatus("Η λήψη αρχείου δεν είναι διαθέσιμη εδώ.", true);
+    const css = [...document.styleSheets].flatMap(sh => { try { return [...sh.cssRules].map(r => r.cssText).filter(t => t.startsWith(".inv")); } catch { return []; } }).join("\n");
+    const html = `<!doctype html><html lang="el"><head><meta charset="utf-8"><title>${esc((custOf(viewing.customerId)||{}).name || "")} ${dt(viewing.date)}</title><style>body{margin:24px;font-family:Arial,Helvetica,sans-serif;background:#fff}.r{text-align:right}th{text-align:left}${css}@media print{body{margin:0}.inv{padding:0}}@page{size:A4;margin:12mm}</style></head><body>${invoiceHTML(viewing)}<script>window.onload=()=>window.print()<\/script></body></html>`;
+    try { await dl.save({filename: `parastatiko-${viewing.number || viewing._id}-${viewing.date || ""}.html`, data: html}); setStatus("Άνοιξε το αρχείο που κατέβηκε: ανοίγει κατευθείαν το παράθυρο εκτύπωσης."); }
+    catch (err) { if (err && err.code !== "declined") setStatus("Η λήψη απέτυχε.", true); }
+  };
+
+  let selCust = null, custTab = "info";
+  function custListHTML(q){
+    const rows = customers.slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"el"))
+      .filter(c => !q || CF.some(([k]) => key(c[k]).includes(q)) || docs.some(d => d.customerId === c._id && (key(d.deliveryCity).includes(q) || lines(d).some(l => key(l.product).includes(q) || key(lineName(l)).includes(q)))))
+      .map(c => { const cd = docs.filter(d => d.customerId === c._id && d.purpose !== "Επιστροφή"); const usual = countBy(cd.filter(d => d.delivery !== ""), deliveryLabel)[0]; const n = issuesForCustomer(c._id).reduce((a,x)=>a+x.items.length,0);
+        return `<tr data-opencust="${esc(c._id)}"><td>${nameCell(c)}</td><td>${esc(c.city)}</td><td class="num">${esc(c.phone)}</td><td class="num">${esc(c.afm)}</td><td>${usual ? esc(usual[0]) : "–"}</td><td class="r num">${cd.length}</td><td class="r">${n ? `<span class="badge warn">${n}</span>` : ""}</td></tr>`; });
+    return rows.length ? `<div class="tbox"><table class="dtable"><thead><tr><th>Πελάτης</th><th>Πόλη</th><th>Τηλέφωνο</th><th>ΑΦΜ</th><th>Συνήθης αποστολή</th><th class="r">Παραγγελίες</th><th class="r">Εκκρεμότητες</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>` : `<p class="hint">Κανένας πελάτης δεν ταιριάζει στην αναζήτηση.</p>`;
+  }
+  function productTable(st){
+    return `${st.length ? `<div class="tbox"><table class="ptable"><thead><tr><th>Κωδικός</th><th>Προϊόν</th><th class="r">Παραγγελίες</th><th class="r">Συνολική ποσότητα</th><th class="r">Μ.Ο. ανά παραγγελία</th><th class="r">Τιμή (προ έκπτωσης, χωρίς ΦΠΑ)</th><th class="r">Τιμή με έκπτωση</th><th class="r">Τελική τιμή με ΦΠΑ</th></tr></thead><tbody>
+            ${st.map(s => `<tr title="${esc(s.product)}"><td class="num">${esc(s.code) || "–"}</td><td>${esc(s.name)}</td><td class="r num">${s.times}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${s.times ? qn(Math.round(s.sold/s.times*10)/10) : "–"}</td><td class="r num">${eur(s.lastList)}</td><td class="r num">${eur(s.lastPrice)}${s.lastDisc ? ` <span class="hint">(−${qn(s.lastDisc)}%)</span>` : ""}</td><td class="r num"><b>${s.lastPrice != null ? eur(Math.round(s.lastPrice * (1 + s.lastVat/100) * 100)/100) : "–"}</b></td></tr>`).join("")}
+          </tbody></table></div>` : `<p class="hint">Δεν υπάρχουν ακόμα προϊόντα.</p>`}`;
+  }
+  function custAnalysis(c, st, cd){
+    const sales = cd.filter(d => d.purpose !== "Επιστροφή"), tots = sales.map(docTotals);
+    const net = tots.reduce((a,t)=>a+(t.priced?t.net:0),0), qty = st.reduce((a,s)=>a+s.qty,0), pricedN = tots.filter(t=>t.priced).length;
+    const cat = new Map(); st.forEach(s => { const x = cat.get(s.cat) || {qty:0, value:0, n:0}; x.qty += s.qty; x.value += s.value; x.n++; cat.set(s.cat, x); });
+    const totV = st.reduce((a,s)=>a+s.value,0);
+    const top = st.slice().sort((a,b)=>b.value-a.value).slice(0,5);
+    return `<div class="info"><div><span>Παραγγελίες</span><b class="num">${sales.length}</b></div><div><span>Τεμάχια συνολικά</span><b class="num">${qn(qty)}</b></div><div><span>Καθαρή αξία συνολικά</span><b class="num">${eur(r2(net))}</b></div><div><span>Μέση αξία παραγγελίας</span><b class="num">${pricedN ? eur(r2(net/pricedN)) : "–"}</b></div><div><span>Διαφορετικά προϊόντα</span><b class="num">${st.length}</b></div></div>
+      <h4>Ανά κατηγορία</h4>${tbl([["Κατηγορία"],["Προϊόντα","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% αγορών","r"]], [...cat.entries()].sort((a,b)=>b[1].value-a[1].value).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}</td><td class="r num">${qn(x.qty)}</td><td class="r num">${eur(r2(x.value))}</td><td class="r num">${pct(x.value,totV)}</td></tr>`))}
+      <h4>Τα 5 μεγαλύτερα προϊόντα του (σε αξία)</h4>${tbl([["Προϊόν"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% αγορών","r"]], top.map(s => `<tr><td>${esc(s.name)}</td><td class="r num">${qn(s.qty)}</td><td class="r num">${eur(r2(s.value))}</td><td class="r num">${pct(s.value,totV)}</td></tr>`))}
+      <h4>Αποστολές</h4><div class="info"><div><span>Σημεία παράδοσης</span>${deliveryPoints(cd) || "–"}</div><div><span>Τρόπος / πρακτορείο</span>${deliverySummary(cd) || "–"}</div></div>`;
+  }
+  function custDetail(c){
+    const st = statsFor(c._id), cd = docs.filter(d => d.customerId === c._id), iss = issuesForCustomer(c._id), nIss = iss.reduce((a,x)=>a+x.items.length,0);
+    const tabs = [["info","Στοιχεία"],["prod",`Προϊόντα (${st.length})`],["docs",`Παραστατικά (${cd.length})`],["ana","Ανάλυση"],["todo",`Εκκρεμότητες (${nIss})`]];
+    const field = (l, v, cls) => `<div><span>${l}</span><div class="${cls||""}">${v ? esc(v) : "–"}</div></div>`;
+    let body = "";
+    if (custTab === "info") body = `<h4>Στοιχεία χρέωσης</h4><div class="info">${field("Επωνυμία", c.name)}${field("Διακριτικός τίτλος", c.tradeName)}${field("ΑΦΜ", c.afm, "num")}${field("ΔΟΥ", c.doy)}${field("Διεύθυνση έδρας", c.address)}${field("Πόλη", c.city)}${field("Τηλέφωνο", c.phone, "num")}${field("Επάγγελμα", c.profession)}${field("Δραστηριότητα", c.activity)}${field("Ιστοσελίδα", c.website)}${field("Βασική έκπτωση", num(c.baseDiscount) != null ? qn(num(c.baseDiscount)) + "%" : "")}</div>
+      <h4>Παράδοση και πρακτορεία</h4><div class="info"><div><span>Σημεία παράδοσης</span>${deliveryPoints(cd) || "–"}</div><div><span>Τρόπος / πρακτορείο</span>${deliverySummary(cd) || "–"}</div></div>
+      ${(c.agreements||[]).length ? `<h4>Ειδικές συμφωνίες</h4>${tbl([["Για"],["Τιμή","r"],["Έκπτ.","r"],["Min","r"],["Ισχύς"],["Κατάσταση"],["Σημ."]], c.agreements.map(a => `<tr><td>${esc(a.target)}</td><td class="r num">${eur(num(a.price))}</td><td class="r num">${num(a.discount)!=null?qn(num(a.discount))+"%":"–"}</td><td class="r num">${num(a.minQty)!=null?qn(num(a.minQty)):"–"}</td><td class="num">${dt(a.from)} – ${a.to?dt(a.to):"…"}</td><td>${esc(a.status||"Ενεργή")}</td><td>${esc(a.notes)}</td></tr>`))}` : ""}
+      ${c.notes ? `<h4>Σημειώσεις / πηγές</h4><p class="hint">${esc(c.notes)}</p>` : ""}
+      <div><button type="button" class="small" data-editcust="${esc(c._id)}">Διόρθωση στοιχείων</button></div>`;
+    else if (custTab === "prod") body = productTable(st) + customerPriceTable(c);
+    else if (custTab === "docs") body = docTable(cd, false);
+    else if (custTab === "ana") body = custAnalysis(c, st, cd);
+    else body = iss.length ? iss.map(x => `<h4>${esc(x.title)}</h4>${x.items.map(issueHTML).join("")}`).join("") : `<p class="hint">Δεν εκκρεμεί τίποτα για αυτόν τον πελάτη.</p>`;
+    return `<div><button type="button" class="link" id="backCust">← Όλοι οι πελάτες</button></div>
+      <div class="custhead"><div><h2>${esc(c.name)}</h2><div class="meta">${c.tradeName?`<span>${esc(c.tradeName)}</span>`:""}<span>${esc(c.city)}</span>${c.phone?`<span class="num">Τηλ. ${esc(c.phone)}</span>`:""}${c.afm?`<span class="num">ΑΦΜ ${esc(c.afm)}</span>`:""}</div></div></div>
+      <div class="tabs subtabs">${tabs.map(([k,l]) => `<button type="button" data-ctab="${k}" aria-selected="${custTab===k}">${l}</button>`).join("")}</div>
+      <div class="custbody">${body}</div>`;
+  }
+
+  function render(){
+    const q = key($("q").value);
+    const any = customers.length || docs.length;
+    $("empty").hidden = !!any;
+    const unpriced = docs.filter(d => d.purpose !== "Επιστροφή").reduce((n,d) => n + lines(d).filter(l => num(l.price) == null).length, 0);
+    $("totals").innerHTML = any ? `<span>Πελάτες <b>${customers.length}</b></span><span>Παραστατικά <b>${docs.length}</b></span><span>Γραμμές χωρίς τιμή <b>${unpriced}</b></span>` : "";
+    $("custList").hidden = tab !== "C"; $("docList").hidden = tab !== "D"; $("anaList").hidden = tab !== "A"; $("prodList").hidden = tab !== "P"; $("agList").hidden = tab !== "G"; $("todoList").hidden = tab !== "T"; $("q").hidden = tab === "A" || (tab === "C" && !!selCust);
+    ["C","P","G","T","A"].forEach(t => $("tab"+t).setAttribute("aria-selected", tab === t));
+    $("agentNames").innerHTML = [...new Set(docs.map(d => (d.agent||"").trim()).filter(Boolean))].sort().map(a => `<option value="${esc(a)}">`).join("");
+    if (tab === "A") renderAnalysis();
+    if (tab === "P") renderCatalog(q);
+    if (tab === "G") renderAgents(q);
+    if (tab === "T") renderTodos(q);
+    $("catNames").innerHTML = [...new Set(catalog.map(p => p.category).filter(Boolean))].sort().map(c => `<option value="${esc(c)}">`).join("");
+    $("prodNames").innerHTML = [...new Set(docs.flatMap(d => lines(d).map(l => (l.product||"").trim())).filter(Boolean))].sort().map(p => `<option value="${esc(p)}">`).join("");
+
+    $("custList").innerHTML = selCust && custOf(selCust) ? custDetail(custOf(selCust)) : custListHTML(q);
+    $("docList").innerHTML = docTable(docs.filter(d => { const c = custOf(d.customerId) || {}; return !q || key(c.name).includes(q) || key(c.afm).includes(q) || key(c.city).includes(q) || key(d.number).includes(q) || lines(d).some(l => key(l.product).includes(q) || key(lineName(l)).includes(q)); }), true);
+  }
+
+  // ----- customer fields -----
+  function fieldsHTML(prefix){ return CF.map(([k,l,full]) => `<label class="${full?"full":""}">${l}<input id="${prefix}${k}" ${k==="afm"?'inputmode="numeric"':k==="phone"?'inputmode="tel"':""}></label>`).join(""); }
+  $("newCustFields").innerHTML = fieldsHTML("n_");
+  $("custFields").innerHTML = fieldsHTML("c_");
+  const readCust = p => Object.fromEntries(CF.map(([k]) => [k, $(p+k).value.trim()]));
+
+  // ----- document editor -----
+  function addLine(l){
+    const d = document.createElement("div"); d.className = "prow";
+    const v = x => x == null ? "" : String(x).replace(".", ",");
+    d.innerHTML = `<input class="lp" list="prodNames" placeholder="Περιγραφή προϊόντος" aria-label="Προϊόν" value="${esc(l?l.product:"")}"><input class="lc" placeholder="Κωδ." aria-label="Κωδικός" value="${esc(l?l.code:"")}"><input class="lq" inputmode="decimal" placeholder="1" aria-label="Ποσότητα" value="${esc(l?v(l.qty):"")}"><input class="lpr" inputmode="decimal" placeholder="–" aria-label="Τιμή ανά τεμάχιο" value="${esc(l?v(l.price):"")}"><input class="ld" inputmode="decimal" placeholder="0" aria-label="Έκπτωση %" value="${esc(l?v(l.discount):"")}"><button type="button" aria-label="Αφαίρεση">✕</button>`;
+    d.querySelector("button").onclick = () => d.remove();
+    $("lines").appendChild(d);
+  }
+  function openDoc(id, presetCust){
+    editingDoc = id; delArmed = false; $("docConfirm").hidden = true;
+    const d = id ? docs.find(x => x._id === id) || {} : {docType:"Τιμολόγιο", customerId: presetCust || ""};
+    $("d_docType").value = d.docType || "Τιμολόγιο"; $("d_date").value = d.date || ""; $("d_number").value = d.number || ""; $("d_notes").value = d.notes || "";
+    $("d_deliveryAddress").value = d.deliveryAddress || ""; $("d_deliveryCity").value = d.deliveryCity || "";
+    $("d_purpose").value = d.purpose || "Πώληση"; $("d_related").value = d.related || ""; $("d_mark").value = d.mark || ""; $("d_vatRate").value = d.vatRate != null ? d.vatRate : "";
+    $("d_delivery").value = d.delivery || (d.delivery === "" ? "" : "Από εμάς"); $("d_agent").value = d.agent || ""; $("agentWrap").hidden = $("d_delivery").value !== "Πρακτορείο";
+    $("d_customer").innerHTML = `<option value="">— Επίλεξε πελάτη —</option><option value="__new">+ Νέος πελάτης</option>` +
+      customers.slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"el")).map(c => `<option value="${esc(c._id)}">${esc(c.name)}${c.afm?" · "+esc(c.afm):""}</option>`).join("");
+    $("d_customer").value = d.customerId || "";
+    CF.forEach(([k]) => $("n_"+k).value = "");
+    $("newCust").hidden = $("d_customer").value !== "__new";
+    $("lines").innerHTML = ""; (lines(d).length ? lines(d) : [null]).forEach(addLine);
+    $("docTitle").textContent = id ? "Επεξεργασία παραστατικού" : "Νέο παραστατικό";
+    $("docDel").hidden = !id; $("docSheet").hidden = false;
+  }
+  $("d_delivery").onchange = () => { $("agentWrap").hidden = $("d_delivery").value !== "Πρακτορείο"; };
+  $("d_customer").onchange = () => { $("newCust").hidden = $("d_customer").value !== "__new"; };
+  $("addLine").onclick = () => addLine(null);
+  $("docCancel").onclick = () => { $("docSheet").hidden = true; };
+  $("addDoc").onclick = () => openDoc(null);
+
+  $("docForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!db) return setStatus("Η αποθήκευση δεν είναι διαθέσιμη σε αυτή την προβολή.", true);
+    let cid = $("d_customer").value;
+    $("docSave").disabled = true;
+    try {
+      if (cid === "__new") {
+        const c = readCust("n_");
+        if (!c.name && !c.afm) { setStatus("Συμπλήρωσε τουλάχιστον επωνυμία ή ΑΦΜ.", true); return; }
+        const existing = c.afm && customers.find(x => key(x.afm) === key(c.afm));
+        if (existing) cid = existing._id;
+        else { const ref = c.afm ? db.collection("customers").doc("afm-" + c.afm.replace(/[^0-9A-Za-z]/g,"")) : db.collection("customers").doc(); c.updatedAt = new Date().toISOString(); await ref.set(c); cid = ref.id; }
+      }
+      if (!cid) { setStatus("Επίλεξε πελάτη.", true); return; }
+      const data = { customerId: cid, docType: $("d_docType").value, date: $("d_date").value, number: $("d_number").value.trim(), notes: $("d_notes").value.trim(),
+        delivery: $("d_delivery").value, agent: $("d_delivery").value === "Πρακτορείο" ? $("d_agent").value.trim() : "",
+        deliveryAddress: $("d_deliveryAddress").value.trim(), deliveryCity: $("d_deliveryCity").value.trim(),
+        vatRate: num($("d_vatRate").value) ?? 24, purpose: $("d_purpose").value, related: $("d_related").value.trim(), mark: $("d_mark").value.trim(),
+        lines: [...$("lines").querySelectorAll(".prow")].map(r => ({ code: r.querySelector(".lc").value.trim(), product: r.querySelector(".lp").value.trim(), qty: num(r.querySelector(".lq").value) ?? 1, price: num(r.querySelector(".lpr").value), discount: num(r.querySelector(".ld").value) })).filter(l => l.product),
+        updatedAt: new Date().toISOString() };
+      const col = db.collection("documents");
+      await (editingDoc ? col.doc(editingDoc) : col.doc()).set(data);
+      $("docSheet").hidden = true; setStatus("Αποθηκεύτηκε.");
+    } catch (err) {
+      setStatus(err && err.code === "invalid_argument" ? "Δεν έχεις δικαίωμα αλλαγών σε αυτό το αρχείο." : "Η αποθήκευση απέτυχε. Δοκίμασε ξανά.", true);
+    } finally { $("docSave").disabled = false; }
+  });
+  $("docDel").onclick = async () => {
+    if (!delArmed) { delArmed = true; $("docConfirm").hidden = false; return; }
+    try { await db.collection("documents").doc(editingDoc).delete(); $("docSheet").hidden = true; setStatus("Διαγράφηκε."); }
+    catch { setStatus("Η διαγραφή απέτυχε.", true); }
+  };
+
+  // ----- customer editor -----
+  const AST = ["Ενεργή","Έληξε","Ακυρώθηκε"];
+  function addAgr(a){
+    const d = document.createElement("div"); d.className = "arow"; const v = x => x == null ? "" : String(x).replace(".", ",");
+    d.innerHTML = `<label class="wide">Για (κωδικός ή κατηγορία)<input class="at" list="targets" value="${esc(a&&a.target)}"></label>
+      <label>Καθαρή τιμή €<input class="ap" inputmode="decimal" value="${esc(a?v(a.price):"")}"></label><label>ή Έκπτωση %<input class="ad" inputmode="decimal" value="${esc(a?v(a.discount):"")}"></label>
+      <label>Ελάχ. ποσότητα<input class="am" inputmode="decimal" value="${esc(a?v(a.minQty):"")}"></label><label>Από<input type="date" class="af" value="${esc(a&&a.from)}"></label><label>Έως<input type="date" class="ato" value="${esc(a&&a.to)}"></label>
+      <label>Κατάσταση<select class="as">${AST.map(x => `<option ${a&&a.status===x?"selected":""}>${x}</option>`).join("")}</select></label>
+      <label class="wide">Σημειώσεις<input class="an" value="${esc(a&&a.notes)}"></label><div><button type="button" class="small danger">Αφαίρεση</button></div>`;
+    d.querySelector("button").onclick = () => d.remove(); $("agrs").appendChild(d);
+  }
+  $("addAgr").onclick = () => addAgr(null);
+  function openCust(id){
+    editingCust = id; const c = custOf(id) || {}; CF.forEach(([k]) => $("c_"+k).value = c[k] || "");
+    $("c_baseDiscount").value = c.baseDiscount != null ? String(c.baseDiscount).replace(".", ",") : "";
+    $("targets").innerHTML = [...new Set(catalog.filter(p => p.type !== "special").flatMap(p => [p.code, p.category]).filter(Boolean))].map(t => `<option value="${esc(t)}">`).join("");
+    $("agrs").innerHTML = ""; (c.agreements || []).forEach(addAgr);
+    $("custSheet").hidden = false;
+  }
+  $("custCancel").onclick = () => { $("custSheet").hidden = true; };
+  $("custForm").addEventListener("submit", async e => {
+    e.preventDefault(); if (!db) return;
+    $("custSave").disabled = true;
+    try { const c = Object.assign({}, custOf(editingCust) || {}, readCust("c_")); delete c._id; c.baseDiscount = num($("c_baseDiscount").value);
+      c.agreements = [...$("agrs").querySelectorAll(".arow")].map(r => ({target: r.querySelector(".at").value.trim(), price: num(r.querySelector(".ap").value), discount: num(r.querySelector(".ad").value), minQty: num(r.querySelector(".am").value), from: r.querySelector(".af").value, to: r.querySelector(".ato").value, status: r.querySelector(".as").value, notes: r.querySelector(".an").value.trim()})).filter(a => a.target);
+      c.updatedAt = new Date().toISOString(); await db.collection("customers").doc(editingCust).set(c); $("custSheet").hidden = true; setStatus("Αποθηκεύτηκε."); }
+    catch { setStatus("Η αποθήκευση απέτυχε.", true); } finally { $("custSave").disabled = false; }
+  });
+
+  document.addEventListener("click", e => {
+    const t = e.target.closest("[data-doc],[data-editcust],[data-newdocfor],[data-prod],[data-newprod],[data-agent],[data-done],[data-view],[data-custdocs],[data-opencust],[data-ctab],[data-atab],[data-prodcust],[data-opencustana]"); if (!t) return;
+    if (t.dataset.view) return openView(t.dataset.view);
+    if (t.dataset.opencust) { selCust = t.dataset.opencust; custTab = "info"; render(); window.scrollTo(0,0); return; }
+    if (t.dataset.ctab) { custTab = t.dataset.ctab; render(); return; }
+    if (t.dataset.atab) { anaTab = t.dataset.atab; render(); return; }
+    if (t.dataset.prodcust) return openProdCust(t.dataset.prodcust);
+    if (t.dataset.opencustana) { tab = "C"; selCust = t.dataset.opencustana; custTab = "ana"; render(); window.scrollTo(0,0); return; }
+    if (t.dataset.custdocs) return openCustDocs(t.dataset.custdocs);
+    if (t.dataset.agent) return openAgent(t.dataset.agent);
+    if (t.dataset.done) { db && db.collection("todos").doc(t.dataset.done).update({status: "done", doneAt: new Date().toISOString()}).then(() => setStatus("Ολοκληρώθηκε."), () => setStatus("Η αποθήκευση απέτυχε.", true)); return; }
+    if (t.dataset.prod) return openProd(t.dataset.prod);
+    if (t.dataset.newprod) { const l = docs.flatMap(lines).find(l => lineKey(l) === t.dataset.newprod) || {}; return openProd(null, {type:"special", code:l.code, description:l.product}); }
+    if (t.dataset.doc) openDoc(t.dataset.doc);
+    else if (t.dataset.editcust) openCust(t.dataset.editcust);
+    else openDoc(null, t.dataset.newdocfor);
+  });
+  // Type-ahead on the category list: typing letters jumps to the first category that starts with them.
+  let catBuf = "", catT = 0;
+  document.addEventListener("keydown", e => {
+    const id = e.target.id; if ((id !== "prodCat" && id !== "prodFeat") || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+    e.preventDefault(); clearTimeout(catT); catBuf += e.key; catT = setTimeout(() => { catBuf = ""; }, 1200);
+    const want = fold(catBuf), opt = [...e.target.options].find(o => o.value !== "all" && fold(o.value).startsWith(want));
+    const cur = id === "prodCat" ? prodCat : prodFeat;
+    if (opt && opt.value !== cur) { if (id === "prodCat") prodCat = opt.value; else prodFeat = opt.value; render(); const sel = $(id); if (sel) sel.focus(); }
+  });
+  document.addEventListener("change", e => { if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; render(); } if (e.target.id === "prodCat") { prodCat = e.target.value; render(); } if (e.target.id === "prodFeat") { prodFeat = e.target.value; render(); } });
+  document.addEventListener("click", e => {
+    const th = e.target.closest("table.sortable th"); if (!th) return;
+    const table = th.closest("table"), col = th.cellIndex, dir = th.dataset.dir ? (th.dataset.dir === "desc" ? "asc" : "desc") : (th.classList.contains("r") ? "desc" : "asc");
+    sortTable(table, col, dir); anaSort[table.dataset.sortKey] = {col, dir};
+  });
+  document.addEventListener("change", async e => {
+    const sel = e.target.closest("select.reason"); if (!sel || !db) return;
+    try { await db.collection("priceNotes").doc(sel.dataset.note).set({reason: sel.value, updatedAt: new Date().toISOString()}); setStatus("Η αιτία αποθηκεύτηκε."); }
+    catch { setStatus("Η αποθήκευση απέτυχε.", true); }
+  });
+  ["docSheet","custSheet","prodSheet","agSheet","listSheet","viewSheet"].forEach(id => $(id).addEventListener("click", e => { if (e.target === $(id)) $(id).hidden = true; }));
+  $("tabC").onclick = () => { tab = "C"; selCust = null; render(); };
+  document.addEventListener("click", e => { if (e.target.id === "backCust") { selCust = null; render(); } });
+  $("tabA").onclick = () => { tab = "A"; render(); };
+  $("tabP").onclick = () => { tab = "P"; render(); };
+  $("tabG").onclick = () => { tab = "G"; render(); };
+  $("tabT").onclick = () => { tab = "T"; render(); };
+  $("q").addEventListener("input", render);
+
+  // ----- export -----
+  const cell = v => { const s = v == null ? "" : (typeof v === "number" ? String(v).replace(".", ",") : String(v)); return /[";\n\r]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s; };
+  async function save(name, rowsOut){
+    const dl = await claude.use("downloads");
+    if (!dl) return setStatus("Η λήψη αρχείου δεν είναι διαθέσιμη εδώ.", true);
+    try { await dl.save({ filename: `${name}-${new Date().toISOString().slice(0,10)}.csv`, data: "﻿" + rowsOut.map(r => r.map(cell).join(";")).join("\r\n") }); setStatus("Το αρχείο ετοιμάστηκε για λήψη."); }
+    catch (err) { if (err && err.code !== "declined") setStatus("Η λήψη απέτυχε.", true); }
+  }
+  $("exportLines").onclick = () => {
+    const out = [["Ημερομηνία","Παραστατικό","Αριθμός","Σκοπός","Σχετ. παραστατικό","ΜΑΡΚ", ...CF.map(([,l]) => l), "Τόπος παράδοσης","Πόλη παράδοσης","Παράδοση","Πρακτορείο","Κωδικός","Προϊόν","Πλήρες όνομα","Κατηγορία","Ποσότητα","Τιμή/τεμ. (€)","Έκπτωση %","Καθαρή τιμή/τεμ. (€)","Σημειώσεις"]];
+    docs.slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).forEach(d => {
+      const c = custOf(d.customerId) || {};
+      (lines(d).length ? lines(d) : [{}]).forEach(l => out.push([d.date, d.docType, d.number, d.purpose || "Πώληση", d.related, d.mark, ...CF.map(([k]) => c[k]), d.deliveryAddress, d.deliveryCity, d.delivery || "Από εμάς", d.agent, l.code, l.product, lineName(l), l.product || l.code ? lineCat(l) : "", num(l.qty), num(l.price), num(l.discount), netPrice(l), d.notes]));
+    });
+    save("grammes", out);
+  };
+  $("exportCat").onclick = () => {
+    const head = ["Τύπος","Κωδικός","Περιγραφή παραστατικού","Πλήρες όνομα","Κατηγορία","Αποκλειστικό για","Υλικό","Σχήμα","Διάμετρος Ν (εκ.)","Μήκος (εκ.)","Πλάτος (εκ.)","Βάθος (εκ.)","Πάχος (χιλ.)","Μπορντούρα","Κωνικό","Ανάπτυγμα","Θέλει συμπλήρωση","Σημειώσεις","Τρέχουσα τιμή καταλόγου (€)","Ισχύει από"];
+    save("katalogos", [head].concat(catalog.map(p => [p.type === "special" ? "Ειδική παραγγελία" : "Κατάλογος", p.code, p.description, p.fullName, p.category, p.exclusiveFor, p.material, p.shape, num(p.diameter), num(p.length), num(p.width), num(p.depth), num(p.thickness), yn(p.border), yn(p.conical), p.blank, p.needsInfo ? "Ναι" : "", p.notes, listPriceAt(p) ? num(listPriceAt(p).price) : null, listPriceAt(p) ? listPriceAt(p).from : ""])));
+  };
+  $("exportStats").onclick = () => {
+    const out = [["Επωνυμία","ΑΦΜ","Πόλη","Κωδικός","Προϊόν","Πλήρες όνομα","Κατηγορία","Παραγγελίες","Καθαρή ποσότητα","Μ.Ο. ανά παραγγελία","Πρώτη παραγγελία","Τελευταία παραγγελία","Επιστροφές","Τελ. τιμή καταλόγου (€)","Τελ. έκπτωση %","Τελ. καθαρή τιμή (€)","Ελάχ. καθαρή (€)","Μέγ. καθαρή (€)","Ποσότητα χωρίς τιμή"]];
+    customers.forEach(c => statsFor(c._id).forEach(s => out.push([c.name, c.afm, c.city, s.code, s.product, s.name, s.cat, s.times, s.qty, s.times ? Math.round(s.sold/s.times*10)/10 : null, s.firstDate, s.lastDate, s.returned, s.lastList, s.lastDisc, s.lastPrice, s.prices.length?Math.min(...s.prices):null, s.prices.length?Math.max(...s.prices):null, s.unpricedQty])));
+    save("statistika", out);
+  };
+
+  (async () => {
+    db = await claude.use("db");
+    if (!db) { setStatus("Τα δεδομένα δεν είναι διαθέσιμα σε αυτή την προβολή.", true); $("empty").hidden = false; return; }
+    let got = 0; const done = () => { if (++got >= 7) setStatus(""); render(); };
+    const fail = () => setStatus("Χάθηκε η σύνδεση με τα δεδομένα. Ανανέωσε τη σελίδα.", true);
+    db.collection("customers").onSnapshot(s => { customers = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
+    db.collection("todos").onSnapshot(s => { todos = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
+    db.collection("agentRoutes").onSnapshot(s => { routes = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
+    db.collection("agents").onSnapshot(s => { agents = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
+    db.collection("priceNotes").onSnapshot(s => { priceNotes = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
+    db.collection("products").onSnapshot(s => { catalog = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
+    db.collection("documents").onSnapshot(s => { docs = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
+  })();
+  render();
+})();
+</script>

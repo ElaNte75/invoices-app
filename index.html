@@ -25,7 +25,11 @@ body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15
 header{display:flex;flex-wrap:wrap;gap:12px;align-items:end;justify-content:space-between}
 h1{font-family:var(--f-display);font-size:1.7rem;margin:0;text-wrap:balance}
 .sub{color:var(--muted);font-size:.9rem;margin:2px 0 0}
-.actions{display:flex;gap:8px;flex-wrap:wrap}
+.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.hright{display:flex;flex-direction:column;align-items:flex-end;gap:14px;margin-left:auto}
+.clock{text-align:right;line-height:1.2}
+#clockDate{font-size:1.45rem;font-weight:700}
+#clockTime{font-size:1.25rem;font-weight:600;color:var(--muted);margin-top:4px}
 button{font:inherit;font-weight:500;border-radius:8px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
 button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 button.danger{color:var(--danger)}
@@ -174,11 +178,14 @@ select.reason{font-size:.82rem;padding:4px 6px}
       <h1>Αρχείο Τιμολογίων</h1>
       <p class="sub">Πελάτες, προϊόντα και τιμές από τιμολόγια και δελτία αποστολής.</p>
     </div>
+    <div class="hright">
     <div class="actions">
       <button id="exportLines" type="button">CSV γραμμών</button>
       <button id="exportStats" type="button">CSV στατιστικών</button>
       <button id="exportCat" type="button">CSV καταλόγου</button>
       <button id="addDoc" class="primary" type="button">+ Νέο παραστατικό</button>
+    </div>
+    <div class="clock"><div id="clockDate"></div><div id="clockTime" class="num"></div></div>
     </div>
   </header>
   <div class="totals" id="totals"></div>
@@ -1204,6 +1211,13 @@ select.reason{font-size:.82rem;padding:4px 6px}
     customers.forEach(c => statsFor(c._id).forEach(s => out.push([c.name, c.afm, c.city, s.code, s.product, s.name, s.cat, s.times, s.qty, s.times ? Math.round(s.sold/s.times*10)/10 : null, s.firstDate, s.lastDate, s.returned, s.lastList, s.lastDisc, s.lastPrice, s.prices.length?Math.min(...s.prices):null, s.prices.length?Math.max(...s.prices):null, s.unpricedQty])));
     save("statistika", out);
   };
+
+  const tickClock = () => {
+    const t = new Date();
+    $("clockDate").textContent = t.toLocaleDateString("el-GR", {weekday:"long", day:"numeric", month:"long", year:"numeric"}).replace(/^./, c => c.toUpperCase());
+    $("clockTime").textContent = t.toLocaleTimeString("el-GR", {hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false});
+  };
+  tickClock(); setInterval(tickClock, 1000);
 
   (async () => {
     db = await claude.use("db");

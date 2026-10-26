@@ -120,7 +120,6 @@ textarea{min-height:56px;resize:vertical}
 .trend b{display:inline-block;width:4ch;text-align:right;font-weight:700}
 #anaList td:first-child{white-space:normal;min-width:180px}
 .trend.up{color:#5fc48a}.trend.down{color:var(--danger)}.trend.flat{color:var(--muted)}
-.trend.demo{opacity:.6}
 #prodList .periodbar,.periodbar.filters{flex-wrap:wrap}
 .periodbar.filters{margin-bottom:8px}
 .anasec{margin:34px 0 0}
@@ -628,26 +627,25 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const net = sales.reduce((a,d)=>{ const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0);
     return {active: new Set(sales.map(d => d.customerId)).size, orders: sales.length, qty: totQ, net, avg: sales.length ? net / sales.length : 0, prods: prods.length};
   }
-  // Placeholder arrows shown until the previous period has data, so the layout can be judged.
-  const TREND_DEMO = {active:["up",8], orders:["up",12], qty:["down",5], net:["up",3], avg:["flat",0], prods:["down",10]};
-  // Row-level arrows; while the previous period is empty, a stable pseudo-random placeholder per row.
-  const trendSpan = (dir, p, demo) => `<span class="trend ${dir}${demo ? " demo" : ""}"><i>${{up:"▲", down:"▼", flat:"–"}[dir]}</i><b>${p != null && dir !== "flat" ? Math.min(Math.round(p), 999) + "%" : ""}</b></span>`;
+  // Without previous-period data an empty fixed-width slot keeps the columns aligned.
+  const NO_TREND = `<span class="trend"><i></i><b></b></span>`;
+  const trendSpan = (dir, p) => `<span class="trend ${dir}"><i>${{up:"▲", down:"▼", flat:"–"}[dir]}</i><b>${p != null && dir !== "flat" ? Math.min(Math.round(p), 999) + "%" : ""}</b></span>`;
   function cmpTrend(cur, a, seed){
     if (anaPeriod === "all") return "";
-    let dir, p = null; const demo = !prevStats || !prevStats.orders;
-    if (demo) { let h = 0; for (const ch of String(seed)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; dir = ["up","down","flat"][h % 3]; p = dir === "flat" ? 0 : 2 + h % 25; }
-    else if (!a) dir = cur > 0 ? "up" : "flat";
+    if (!prevStats || !prevStats.orders) return NO_TREND;
+    let dir, p = null;
+    if (!a) dir = cur > 0 ? "up" : "flat";
     else { const ch = (cur - a) / a * 100; dir = Math.abs(ch) < 0.5 ? "flat" : ch > 0 ? "up" : "down"; p = Math.abs(ch); }
-    return trendSpan(dir, p, demo);
+    return trendSpan(dir, p);
   }
   let anaAllDocs = [];
   function atPrev(fn){ const pp = prevPeriod(); if (!pp) return null; const cur = docs; docs = anaAllDocs.filter(d => inRange(d, pp.r)); try { return fn(); } finally { docs = cur; } }
   function trend(k, cur){
     if (anaPeriod === "all") return "";
-    let dir, p = null; const demo = !prevStats || !prevStats.orders;
-    if (demo) [dir, p] = TREND_DEMO[k];
-    else { const a = prevStats[k]; if (!a) dir = cur > 0 ? "up" : "flat"; else { const ch = (cur - a) / a * 100; dir = Math.abs(ch) < 0.5 ? "flat" : ch > 0 ? "up" : "down"; p = Math.abs(ch); } }
-    return trendSpan(dir, p, demo);
+    if (!prevStats || !prevStats.orders) return NO_TREND;
+    let dir, p = null;
+    { const a = prevStats[k]; if (!a) dir = cur > 0 ? "up" : "flat"; else { const ch = (cur - a) / a * 100; dir = Math.abs(ch) < 0.5 ? "flat" : ch > 0 ? "up" : "down"; p = Math.abs(ch); } }
+    return trendSpan(dir, p);
   }
   function periodOptions(){
     const ym = [...new Set(docs.map(d => String(d.date||"").slice(0,7)).filter(x => /^\d{4}-\d{2}$/.test(x)))].sort().reverse();
@@ -686,7 +684,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const sales = docs.filter(d => d.purpose !== "Επιστροφή");
     const tabs = [["sum","Μηνιαία εικόνα"],["cust","Ανάλυση ανά πελάτη"],["city","Πόλεις"],["ship","Αποστολές"],["prod","Προϊόντα"],["dev","Αποκλίσεις τιμών"]];
     let body = "";
-    const cmp = anaPeriod === "all" ? "" : !prevStats || !prevStats.orders ? `<p class="hint">Τα βελάκια είναι προς το παρόν δείγμα: δεν υπάρχουν ακόμα στοιχεία για ${prevStats ? esc(prevStats.label) : "την προηγούμενη περίοδο"}.</p>` : `<p class="hint">Τα βελάκια συγκρίνουν με ${esc(prevStats.label)}.</p>`;
+    const cmp = anaPeriod === "all" ? "" : !prevStats || !prevStats.orders ? `<p class="hint">Τα βελάκια θα εμφανιστούν όταν υπάρχουν στοιχεία για ${prevStats ? esc(prevStats.label) : "την προηγούμενη περίοδο"}.</p>` : `<p class="hint">Τα βελάκια συγκρίνουν με ${esc(prevStats.label)}.</p>`;
     if (anaTab === "sum") {
       const netAll = sales.reduce((a,d)=>{ const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0);
       const topC = customers.map(c => ({c, v: custValue(c._id)})).sort((a,b)=>b.v-a.v).slice(0,5);

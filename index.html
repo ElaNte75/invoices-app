@@ -648,7 +648,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const painted = /βαμμέν/i.test(p.material || "") || feats.includes("βαμμένο") || /βαμμέν/i.test(name);
     const mat = String(p.material || "").replace(/\s*βαμμέν\S*/i, "").trim();
     const txt = fold([name, catName, ...feats].join(" "));
-    const extras = [[/διατρητ/, "Διάτρητο"], [/χοντρη τρυπα/, "Χοντρή τρύπα"], [/ψιλη τρυπα/, "Ψιλή τρύπα"], [/βουλ/, "Με βούλες"]].filter(([re]) => re.test(txt)).map(([, l]) => l);
+    const extras = [[/διατρητ/, "Διάτρητο"], [/χοντρη τρυπα/, "Χοντρή τρύπα"], [/ψιλη τρυπα/, "Ψιλή τρύπα"], [/βουλ/, "Με βούλες"], [/διπλο πατημα/, "Διπλό πάτημα"]].filter(([re]) => re.test(txt)).map(([, l]) => l);
+    if ((p.border === "yes" || /μπορντουρ/.test(txt)) && p.border !== "no" && !/χωρισ μπορντουρ/.test(txt)) extras.push("Μπορντούρα");
     const tm = name.match(/–\s*([\d,.]+)\s*χιλ\./), thick = p.thickness ? qn(num(p.thickness)) : tm ? tm[1] : "";
     const desc = name.replace(/\s*–\s*[\d,.]+\s*χιλ\./, "").replace(/\s*(?:από\s+)?(?:αλουμιν|ανοξείδωτ|βαμμέν)\S*/gi, "").replace(/(^|[\s×(])[ΜΠΥ](?=\d)/g, "$1").replace(/\s{2,}/g, " ").trim() + (p.unit ? ` (τιμή ανά ${p.unit})` : "");
     return {cat: catName, desc, thick, dim, dn: dimNorm(dim), mat: mat || "–", paint: painted ? "Βαμμένο" : "", paintF: painted ? "Βαμμένο" : "Άβαφο", extras};

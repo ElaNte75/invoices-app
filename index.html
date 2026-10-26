@@ -590,6 +590,17 @@ select.reason{font-size:.82rem;padding:4px 6px}
   }
   // Placeholder arrows shown until the previous period has data, so the layout can be judged.
   const TREND_DEMO = {active:["up",8], orders:["up",12], qty:["down",5], net:["up",3], avg:["flat",0], prods:["down",10]};
+  // Row-level arrows; while the previous period is empty, a stable pseudo-random placeholder per row.
+  function cmpTrend(cur, a, seed){
+    if (anaPeriod === "all") return "";
+    let dir, p = null; const demo = !prevStats || !prevStats.orders;
+    if (demo) { let h = 0; for (const ch of String(seed)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; dir = ["up","down","flat"][h % 3]; p = dir === "flat" ? 0 : 2 + h % 25; }
+    else if (!a) dir = cur > 0 ? "up" : "flat";
+    else { const ch = (cur - a) / a * 100; dir = Math.abs(ch) < 0.5 ? "flat" : ch > 0 ? "up" : "down"; p = Math.abs(ch); }
+    return `<span class="trend ${dir}${demo ? " demo" : ""}">${{up:"▲", down:"▼", flat:"–"}[dir]}${p != null && dir !== "flat" ? " " + Math.round(p) + "%" : ""}</span>`;
+  }
+  let anaAllDocs = [];
+  function atPrev(fn){ const pp = prevPeriod(); if (!pp) return null; const cur = docs; docs = anaAllDocs.filter(d => inRange(d, pp.r)); try { return fn(); } finally { docs = cur; } }
   function trend(k, cur){
     if (anaPeriod === "all") return "";
     let dir, p = null; const demo = !prevStats || !prevStats.orders;
@@ -608,10 +619,11 @@ select.reason{font-size:.82rem;padding:4px 6px}
   }
   // Click-to-sort for analysis tables; numbers are read from Greek formatting (1.234,56 € / 14,9%).
   const cellVal = t => { const x = t.replace(/[€%\s]/g,"").replace(/\./g,"").replace(",","."); return /^[-+]?\d+(\.\d+)?$/.test(x) ? parseFloat(x) : null; };
+  const cellText = c => c ? [...c.childNodes].filter(n => !(n.classList && n.classList.contains("trend"))).map(n => n.textContent).join("").trim() : "";
   function sortTable(table, col, dir){
     const tb = table.tBodies[0]; if (!tb) return;
     const rows = [...tb.rows];
-    rows.sort((a,b) => { const A = a.cells[col]?.textContent.trim() || "", B = b.cells[col]?.textContent.trim() || ""; const na = cellVal(A), nb = cellVal(B);
+    rows.sort((a,b) => { const A = cellText(a.cells[col]), B = cellText(b.cells[col]); const na = cellVal(A), nb = cellVal(B);
       const r = (na != null && nb != null) ? na - nb : A.localeCompare(B, "el", {numeric:true}); return dir === "asc" ? r : -r; });
     rows.forEach(r => tb.appendChild(r));
     [...table.tHead.rows[0].cells].forEach((th,i) => { th.dataset.dir = i === col ? dir : ""; });
@@ -627,32 +639,35 @@ select.reason{font-size:.82rem;padding:4px 6px}
   }
   function custValue(cid){ return docs.filter(d => d.customerId === cid && d.purpose !== "Επιστροφή").reduce((a,d) => { const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0); }
   let periodHTML = "";
-  function renderAnalysis(){ periodHTML = periodOptions(); const pp = prevPeriod(); prevStats = pp ? withRange(pp.r, sumStats) : null; prevStats && (prevStats.label = pp.label); withPeriod(renderAnalysisInner); applySorts($("anaList"), "ana-" + anaTab); }
+  function renderAnalysis(){ periodHTML = periodOptions(); const pp = prevPeriod(); prevStats = pp ? withRange(pp.r, sumStats) : null; prevStats && (prevStats.label = pp.label); anaAllDocs = docs; withPeriod(renderAnalysisInner); applySorts($("anaList"), "ana-" + anaTab); }
   function renderAnalysisInner(){
     const {prods, totQ, totV} = analysisData();
     const sales = docs.filter(d => d.purpose !== "Επιστροφή");
     const tabs = [["sum","Μηνιαία εικόνα"],["cust","Ανάλυση ανά πελάτη"],["city","Πόλεις"],["ship","Αποστολές"],["prod","Προϊόντα"],["dev","Αποκλίσεις τιμών"]];
     let body = "";
+    const cmp = anaPeriod === "all" ? "" : !prevStats || !prevStats.orders ? `<p class="hint">Τα βελάκια είναι προς το παρόν δείγμα: δεν υπάρχουν ακόμα στοιχεία για ${prevStats ? esc(prevStats.label) : "την προηγούμενη περίοδο"}.</p>` : `<p class="hint">Τα βελάκια συγκρίνουν με ${esc(prevStats.label)}.</p>`;
     if (anaTab === "sum") {
       const netAll = sales.reduce((a,d)=>{ const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0);
       const topC = customers.map(c => ({c, v: custValue(c._id)})).sort((a,b)=>b.v-a.v).slice(0,5);
       const topP = prods.slice().sort((a,b)=>b.value-a.value).slice(0,5);
       const cur = sumStats(), card = (label, val, k, extra) => `<div><span>${label}</span><b class="num">${val}</b>${extra || ""}${k ? trend(k, cur[k]) : ""}</div>`;
-      const cmp = anaPeriod === "all" ? "" : !prevStats || !prevStats.orders ? `<p class="hint">Τα βελάκια είναι προς το παρόν δείγμα: δεν υπάρχουν ακόμα στοιχεία για ${prevStats ? esc(prevStats.label) : "την προηγούμενη περίοδο"}.</p>` : `<p class="hint">Τα βελάκια συγκρίνουν με ${esc(prevStats.label)}.</p>`;
       body = `<div class="info">${card("Πελάτες συνολικά", customers.length)}${card("Πελάτες με παραγγελία", cur.active, "active", ` <small class="hint">από ${customers.length}</small>`)}${card("Παραγγελίες", cur.orders, "orders")}${card("Τεμάχια", qn(cur.qty), "qty")}${card("Καθαρή αξία (χωρίς ΦΠΑ)", eur(r2(cur.net)), "net")}${card("Μέση παραγγελία", cur.orders ? eur(r2(cur.avg)) : "–", "avg")}${card("Διαφορετικά προϊόντα", cur.prods, "prods")}</div>${cmp}
         <h4>Οι 5 μεγαλύτεροι πελάτες (σε αξία)</h4>${tbl([["Πελάτης"],["Πόλη"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], topC.map(x => `<tr data-opencustana="${esc(x.c._id)}"><td>${nameCell(x.c)}</td><td>${esc(x.c.city)}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${pct(x.v,netAll)}</td></tr>`))}
         <h4>Τα 5 μεγαλύτερα προϊόντα (σε αξία)</h4>${tbl([["Κωδικός"],["Προϊόν"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], topP.map(p => `<tr><td class="num">${esc(p.code)}</td><td>${esc(p.name)}</td><td class="r num">${qn(p.qty)}</td><td class="r num">${eur(r2(p.value))}</td><td class="r num">${pct(p.value,totV)}</td></tr>`))}`;
     } else if (anaTab === "cust") {
-      const rows = customers.map(c => { const cs = sales.filter(d => d.customerId === c._id), v = custValue(c._id), q = statsFor(c._id).reduce((a,s)=>a+s.qty,0); return {c, n: cs.length, v, q}; }).sort((a,b)=>b.v-a.v);
-      const tot = rows.reduce((a,x)=>a+x.v,0);
-      body = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["Μέση παραγγελία","r"],["% πωλήσεων","r"]], rows.map(x => `<tr data-opencustana="${esc(x.c._id)}"><td>${nameCell(x.c)}</td><td>${esc(x.c.city)}</td><td class="r num">${x.n}</td><td class="r num">${qn(x.q)}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${x.n ? eur(r2(x.v/x.n)) : "–"}</td><td class="r num">${pct(x.v,tot)}</td></tr>`));
+      const custRows = () => { const sl = docs.filter(d => d.purpose !== "Επιστροφή"); return customers.map(c => { const n = sl.filter(d => d.customerId === c._id).length, v = custValue(c._id), q = statsFor(c._id).reduce((a,s)=>a+s.qty,0); return {c, n, v, q, avg: n ? v / n : 0}; }); };
+      const rows = custRows().sort((a,b)=>b.v-a.v), tot = rows.reduce((a,x)=>a+x.v,0);
+      const prevR = atPrev(custRows) || [], prevTot = prevR.reduce((a,x)=>a+x.v,0), pm = new Map(prevR.map(x => [x.c._id, x]));
+      const T = (x, f, cur) => cmpTrend(cur, f(pm.get(x.c._id) || {n:0, v:0, q:0, avg:0}), x.c._id + f);
+      body = tbl([["Πελάτης"],["Πόλη"],["Παραγγελίες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["Μέση παραγγελία","r"],["% πωλήσεων","r"]], rows.map(x => `<tr data-opencustana="${esc(x.c._id)}"><td>${nameCell(x.c)}</td><td>${esc(x.c.city)}</td><td class="r num">${x.n}${T(x, y => y.n, x.n)}</td><td class="r num">${qn(x.q)}${T(x, y => y.q, x.q)}</td><td class="r num">${eur(r2(x.v))}${T(x, y => y.v, x.v)}</td><td class="r num">${x.n ? eur(r2(x.avg)) : "–"}${T(x, y => y.avg, x.avg)}</td><td class="r num">${pct(x.v,tot)}${T(x, y => prevTot ? y.v / prevTot : 0, tot ? x.v / tot : 0)}</td></tr>`));
     } else if (anaTab === "city") {
       const m = new Map(); customers.forEach(c => { const k = (c.city||"").trim() || "Χωρίς πόλη"; const x = m.get(k) || {n:0, v:0, names:[]}; x.n++; x.v += custValue(c._id); x.names.push(c.name); m.set(k, x); });
       const tot = [...m.values()].reduce((a,x)=>a+x.v,0);
       body = tbl([["Πόλη"],["Πελάτες","r"],["% πελατών","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"],["Ποιοι"]], [...m.entries()].sort((a,b)=>b[1].v-a[1].v).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}</td><td class="r num">${pct(x.n,customers.length)}</td><td class="r num">${eur(r2(x.v))}</td><td class="r num">${pct(x.v,tot)}</td><td>${esc(x.names.join(", "))}</td></tr>`));
     } else if (anaTab === "ship") {
-      const m = new Map(); sales.forEach(d => { const k = d.delivery === "" ? "Προς συμπλήρωση" : deliveryLabel(d); const x = m.get(k) || {n:0, cust:new Set(), cities:new Set()}; x.n++; x.cust.add(d.customerId); if (d.deliveryCity) x.cities.add(d.deliveryCity); m.set(k, x); });
-      body = tbl([["Αποστολή"],["Παραγγελίες","r"],["% παραγγελιών","r"],["Πελάτες","r"],["Προορισμοί"]], [...m.entries()].sort((a,b)=>b[1].n-a[1].n).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}</td><td class="r num">${pct(x.n,sales.length)}</td><td class="r num">${x.cust.size}</td><td>${esc([...x.cities].join(", "))}</td></tr>`));
+      const shipMap = () => { const m = new Map(); docs.filter(d => d.purpose !== "Επιστροφή").forEach(d => { const k = d.delivery === "" ? "Προς συμπλήρωση" : deliveryLabel(d); const x = m.get(k) || {n:0, cust:new Set(), cities:new Set()}; x.n++; x.cust.add(d.customerId); if (d.deliveryCity) x.cities.add(d.deliveryCity); m.set(k, x); }); return m; };
+      const m = shipMap(), pm = atPrev(shipMap) || new Map(), pn = [...pm.values()].reduce((a,x)=>a+x.n,0), P = k => pm.get(k) || {n:0, cust:new Set()};
+      body = tbl([["Αποστολή"],["Παραγγελίες","r"],["% παραγγελιών","r"],["Πελάτες","r"],["Προορισμοί"]], [...m.entries()].sort((a,b)=>b[1].n-a[1].n).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}${cmpTrend(x.n, P(k).n, k + "n")}</td><td class="r num">${pct(x.n,sales.length)}${cmpTrend(sales.length ? x.n / sales.length : 0, pn ? P(k).n / pn : 0, k + "p")}</td><td class="r num">${x.cust.size}${cmpTrend(x.cust.size, P(k).cust.size, k + "c")}</td><td>${esc([...x.cities].join(", "))}</td></tr>`));
     } else if (anaTab === "prod") {
       // Same faceted filters as the catalog: each list offers only values present among the other filters' matches.
       const rows = prods.map(p => { const cp = p.k.startsWith("id:") ? catalog.find(x => x._id === p.k.slice(3)) : null; return Object.assign({p}, prodCols(cp || {description: p.name}, p.cat)); });
@@ -660,12 +675,14 @@ select.reason{font-size:.82rem;padding:4px 6px}
       const ok = (r, skip) => Object.keys(af).every(f => f === skip || af[f] === "all" || val(r, f).includes(af[f]));
       const aopt = f => { const c = countBy(rows.filter(r => ok(r, f)).flatMap(r => val(r, f)), v => v).sort((x,y) => x[0].localeCompare(y[0], "el")); if (af[f] !== "all" && !c.some(([v]) => v === af[f])) c.push([af[f], 0]); return c.map(([v,n]) => `<option value="${esc(v)}" ${af[f]===v?"selected":""}>${esc(v)} (${n})</option>`).join(""); };
       const asel = (id, f, label, all) => `<label for="${id}">${label}</label><select id="${id}"><option value="all">${all}</option>${aopt(f)}</select>`;
+      const prevA = atPrev(analysisData), pm = new Map(((prevA && prevA.prods) || []).map(x => [x.k, x])), pTot = prevA ? prevA.totV : 0;
+      const T = (r, f, cur) => cmpTrend(cur, f(pm.get(r.p.k) || {list:[], qty:0, value:0}), r.p.k + f);
       const list = rows.filter(r => ok(r)).sort((a,b) => b.p.value - a.p.value), lq = list.reduce((n,r) => n + r.p.qty, 0), lv = list.reduce((n,r) => n + r.p.value, 0);
-      body = `<div class="periodbar filters">${asel("aCat","cat","Κατηγορία","Όλες")}${asel("aShape","shape","Σχήμα","Όλα")}${asel("aMat","mat","Υλικό","Όλα")}${asel("aFeat","feat","Ιδιαιτερότητα","Όλες")}${asel("aPaint","paint","Βαφή","Όλα")}${Object.values(af).some(v => v !== "all") ? `<button type="button" id="aClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα · ${qn(lq)} τεμ. · ${eur(r2(lv))}</span></div><p class="hint">Πάτα ένα προϊόν για να δεις ποιοι πελάτες το παίρνουν και σε τι τιμή.</p>` + tbl([["Κατηγορία"],["Κωδικός"],["Προϊόν"],["Σχήμα"],["Υλικό"],["Βαφή"],["Πελάτες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], list.map(r => `<tr data-prodcust="${esc(r.p.k)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.p.code)}</td><td>${esc(r.desc || r.p.name)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td>${esc(r.paint)}</td><td class="r num">${r.p.list.length}</td><td class="r num">${qn(r.p.qty)}</td><td class="r num">${eur(r2(r.p.value))}</td><td class="r num">${pct(r.p.value,totV)}</td></tr>`));
+      body = `<div class="periodbar filters">${asel("aCat","cat","Κατηγορία","Όλες")}${asel("aShape","shape","Σχήμα","Όλα")}${asel("aMat","mat","Υλικό","Όλα")}${asel("aFeat","feat","Ιδιαιτερότητα","Όλες")}${asel("aPaint","paint","Βαφή","Όλα")}${Object.values(af).some(v => v !== "all") ? `<button type="button" id="aClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα · ${qn(lq)} τεμ. · ${eur(r2(lv))}</span></div><p class="hint">Πάτα ένα προϊόν για να δεις ποιοι πελάτες το παίρνουν και σε τι τιμή.</p>` + tbl([["Κατηγορία"],["Κωδικός"],["Προϊόν"],["Σχήμα"],["Υλικό"],["Βαφή"],["Πελάτες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["% πωλήσεων","r"]], list.map(r => `<tr data-prodcust="${esc(r.p.k)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.p.code)}</td><td>${esc(r.desc || r.p.name)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td>${esc(r.paint)}</td><td class="r num">${r.p.list.length}${T(r, y => y.list.length, r.p.list.length)}</td><td class="r num">${qn(r.p.qty)}${T(r, y => y.qty, r.p.qty)}</td><td class="r num">${eur(r2(r.p.value))}${T(r, y => y.value, r.p.value)}</td><td class="r num">${pct(r.p.value,totV)}${T(r, y => pTot ? y.value / pTot : 0, totV ? r.p.value / totV : 0)}</td></tr>`));
     } else {
       body = `<p class="hint">Γραμμές όπου η χρέωση διαφέρει από την τιμή καταλόγου με την έκπτωση του πελάτη.</p>` + tbl([["Ημερομηνία"],["Πελάτης"],["Προϊόν"],["Χρεώθηκε","r"],["Αναμενόμενη","r"],["Διαφορά","r"],["Αιτία"]], deviations().map(x => `<tr><td class="num">${dt(x.d.date)}</td><td>${esc(x.c ? x.c.name : "")}</td><td>${esc(lineName(x.l))}</td><td class="r num">${eur(x.np)}</td><td class="r num">${eur(x.ex.net)}</td><td class="r num dev">${(x.np-x.ex.net>0?"+":"")}${eur(Math.round((x.np-x.ex.net)*1000)/1000)}</td><td><select class="reason" data-note="${esc(x.noteId)}" aria-label="Αιτία">${REASONS.map(r => `<option ${noteFor(x.noteId).reason===r?"selected":""} value="${esc(r)}">${r||"—"}</option>`).join("")}</select></td></tr>`));
     }
-    $("anaList").innerHTML = `<div class="periodbar"><label for="anaPeriod">Περίοδος</label><select id="anaPeriod">${periodHTML}</select>${anaPeriod === "R" ? `<label for="anaFrom">Από</label><input type="date" id="anaFrom" value="${esc(anaFrom)}"><label for="anaTo">Έως</label><input type="date" id="anaTo" value="${esc(anaTo)}">` : ""}</div><div class="tabs subtabs">${tabs.map(([k,l]) => `<button type="button" data-atab="${k}" aria-selected="${anaTab===k}">${l}</button>`).join("")}</div><div class="custbody">${body}</div>`;
+    $("anaList").innerHTML = `<div class="periodbar"><label for="anaPeriod">Περίοδος</label><select id="anaPeriod">${periodHTML}</select>${anaPeriod === "R" ? `<label for="anaFrom">Από</label><input type="date" id="anaFrom" value="${esc(anaFrom)}"><label for="anaTo">Έως</label><input type="date" id="anaTo" value="${esc(anaTo)}">` : ""}</div><div class="tabs subtabs">${tabs.map(([k,l]) => `<button type="button" data-atab="${k}" aria-selected="${anaTab===k}">${l}</button>`).join("")}</div><div class="custbody">${["cust","ship","prod"].includes(anaTab) ? cmp : ""}${body}</div>`;
   }
   function openProdCust(k){ withPeriod(() => openProdCustInner(k)); applySorts($("listBody"), "prodcust"); }
   function openProdCustInner(k){

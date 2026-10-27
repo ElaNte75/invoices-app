@@ -287,7 +287,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
       <label>Κατηγορία<input id="p_category" list="catNames"></label>
       <label class="full">Ιδιαιτερότητες (χωρισμένες με κόμμα)<input id="p_features" placeholder="π.χ. διπλό πάτημα, αφαιρούμενος πάτος"></label>
       <label class="full">Αποκλειστικό για πελάτη (δική του σφραγίδα)<input id="p_exclusiveFor" placeholder="κενό = για όλους"></label>
-      <label>Κόστος παραγωγής €<input id="p_costPrice" inputmode="decimal"></label>
+      <label>Τιμή κόστους €<input id="p_costPrice" inputmode="decimal"></label>
       <label>Υλικό<input id="p_material" placeholder="π.χ. Αλουμίνιο"></label>
       <label>Τύπος υλικού<select id="p_sheetType"><option value="">—</option><option>1050</option><option>1200</option><option>430</option></select></label>
       <label>Σχήμα<select id="p_shape"><option></option><option>Στρογγυλό</option><option>Ορθογώνιο</option><option>Τετράγωνο</option><option>Άλλο</option></select></label>
@@ -798,20 +798,20 @@ select.reason{font-size:.82rem;padding:4px 6px}
   // Ενδεικτικό κόστος υλικού: τιμή €/κιλό και ειδικό βάρος ανά είδος φύλλου (Inox AISI 430 ≈ 7,75).
   const SHEET = {"1050":{eurKg:6,density:2.75},"1200":{eurKg:null,density:2.75},"430":{eurKg:null,density:7.75}};
   const SHEET_TYPES = Object.keys(SHEET);
-  const LIP = 2; // εκ. χείλος ανά πλευρά στο ανάπτυγμα ταψιού
   const effThick = p => { if (p.thickness) return num(p.thickness); const m = (p.fullName || p.description || "").match(/–\s*([\d,.]+)\s*χιλ\./); return m ? num(m[1]) : null; };
   function blankArea(p){
-    const L = num(p.length), W = num(p.width); if (!L || !W) return null;
     const d = num(p.depth) || 0;
+    if (!num(p.length) && !num(p.width)) { const f = num(p.diameter); return f ? Math.PI * f * f / 4 : null; }
+    const L = num(p.length), W = num(p.width); if (!L || !W) return null;
     if ((p.category || "").startsWith("Τσέρκι")) return (2 * (L + W) + 2) * (d + 1);
-    return d ? (L + 2 * (d + LIP)) * (W + 2 * (d + LIP)) : L * W;
+    return d ? (L + 2 * d) * (W + 2 * d) : L * W;
   }
   function costOf(p){ const s = SHEET[p.sheetType], a = blankArea(p), t = effThick(p); return s && s.eurKg != null && a && t ? a / 1e4 * t * s.density * s.eurKg : null; }
   function renderCatalog(q){
     const u = usage();
     const rows = [];
     catalog.forEach(p => { const lp = listPriceAt(p); const price = lp ? num(lp.price) : lastInvoicedPrice(l => productFor(l) === p);
-      rows.push(Object.assign({id: p._id, size: sizeKey(p.fullName || p.description, p), code: p.code, name: (p.fullName || pretty(p.description)) + (p.unit ? ` (τιμή ανά ${p.unit})` : ""), sheet: p.sheetType || "", cost: costOf(p) ?? num(p.costPrice), price}, prodCols(p, p.type === "special" ? "Ειδική κατασκευή" : (p.category || "Χωρίς κατηγορία")))); });
+      rows.push(Object.assign({id: p._id, size: sizeKey(p.fullName || p.description, p), code: p.code, name: (p.fullName || pretty(p.description)) + (p.unit ? ` (τιμή ανά ${p.unit})` : ""), sheet: p.sheetType || "", matCost: costOf(p), manCost: num(p.costPrice), cost: num(p.costPrice) ?? costOf(p), price}, prodCols(p, p.type === "special" ? "Ειδική κατασκευή" : (p.category || "Χωρίς κατηγορία")))); });
     [...u.values()].filter(x => x.k.startsWith("d:")).forEach(x => rows.push(Object.assign({id: "", nk: x.k, size: sizeKey(x.desc), code: x.code, name: pretty(x.desc), cost: null, price: lastInvoicedPrice(l => lineKey(l) === x.k)}, prodCols({description: x.desc}, "Δεν έχει ταξινομηθεί"))));
     const dq = dimNorm(pf.dim), dre = dq ? new RegExp("(^|[^0-9,])" + dq.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) : null;
     // Faceted filters: each list only offers values found among products matching all the other filters.
@@ -821,8 +821,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const list = rows.filter(r => pass(r)).sort((a,b) => a.cat.localeCompare(b.cat, "el") || cmpSize(a.size, b.size) || a.name.localeCompare(b.name, "el", {numeric:true}));
     const active = pf.cat !== "all" || pf.dim || pf.shape !== "all" || pf.thick !== "all" || pf.mat !== "all" || pf.paint !== "all" || pf.feat !== "all";
     const sel = (id, label, all, o) => `<label for="${id}">${label}</label><select id="${id}"><option value="all">${all}</option>${o}</select>`;
-    $("prodList").innerHTML = `<div class="periodbar">${sel("prodCat", "Κατηγορία", "Όλες", catO)}<label for="prodDim">Διάσταση</label><input type="search" id="prodDim" placeholder="π.χ. 30×20" value="${esc(pf.dim)}">${sel("prodShape", "Σχήμα", "Όλα", shapeO)}${sel("prodMat", "Υλικό", "Όλα", matO)}${sel("prodThick", "Πάχος (χιλ.)", "Όλα", thickO)}${sel("prodFeat", "Ιδιαιτερότητα", "Όλες", featO)}${sel("prodPaint", "Βαφή", "Όλα", paintO)}${active ? `<button type="button" id="prodClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα</span></div><div class="custbody"><p class="hint">Η τιμή πώλησης είναι η αρχική, πριν από την έκπτωση κάθε πελάτη. Το κόστος είναι ενδεικτικό υλικού (κράμα 1050: 6 €/κιλό· 1200 και 430 χωρίς τιμή ακόμα) και βγαίνει αυτόματα όταν υπάρχουν διαστάσεις και πάχος.</p>${tbl([["Κατηγορία"],["Κωδικός"],["Περιγραφή · Μήκος × Πλάτος × Ύψος"],["Πάχος (χιλ.)","r"],["Σχήμα"],["Υλικό"],["Τύπος υλικού"],["Ιδιαιτερότητες"],["Βαφή"],["Κόστος παραγωγής","r"],["Τιμή πώλησης","r"],["Με ΦΠΑ 24%","r"],["Κέρδος (χωρίς ΦΠΑ)","r"]],
-      list.map(r => `<tr ${r.id ? `data-prod="${esc(r.id)}"` : `data-newprod="${esc(r.nk)}"`} title="${esc(r.name)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.code)}</td><td>${esc(r.desc)}</td><td class="r num">${esc(r.thick)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td>${r.id ? `<select class="sheetSel" data-id="${esc(r.id)}"><option value="">–</option>${SHEET_TYPES.map(t => `<option ${r.sheet === t ? "selected" : ""}>${t}</option>`).join("")}</select>` : "–"}</td><td>${esc(r.extras.join(", "))}</td><td>${esc(r.paint)}</td><td class="r num">${r.cost != null ? eur(r.cost) : "–"}</td><td class="r num">${eur(r.price)}</td><td class="r num"><b>${r.price != null ? eur(r2(r.price * 1.24)) : "–"}</b></td><td class="r num">${r.cost != null && r.price != null ? `${eur(r2(r.price - r.cost))} <span class="hint">${pct((r.price - r.cost) / r.price, 1)}</span>` : "–"}</td></tr>`))}
+    $("prodList").innerHTML = `<div class="periodbar">${sel("prodCat", "Κατηγορία", "Όλες", catO)}<label for="prodDim">Διάσταση</label><input type="search" id="prodDim" placeholder="π.χ. 30×20" value="${esc(pf.dim)}">${sel("prodShape", "Σχήμα", "Όλα", shapeO)}${sel("prodMat", "Υλικό", "Όλα", matO)}${sel("prodThick", "Πάχος (χιλ.)", "Όλα", thickO)}${sel("prodFeat", "Ιδιαιτερότητα", "Όλες", featO)}${sel("prodPaint", "Βαφή", "Όλα", paintO)}${active ? `<button type="button" id="prodClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα</span></div><div class="custbody"><p class="hint">Η τιμή πώλησης είναι η αρχική, πριν από την έκπτωση κάθε πελάτη. Το κόστος υλικού είναι ενδεικτικό (κράμα 1050: 6 €/κιλό· 1200 και 430 χωρίς τιμή ακόμα) και βγαίνει αυτόματα όταν υπάρχουν διαστάσεις και πάχος. Στην «Τιμή κόστους» μπορείς να βάλεις το συνολικό κόστος (υλικό+εργασία) όταν το ξέρεις.</p>${tbl([["Κατηγορία"],["Κωδικός"],["Περιγραφή · Μήκος × Πλάτος × Ύψος"],["Πάχος (χιλ.)","r"],["Σχήμα"],["Υλικό"],["Τύπος υλικού"],["Ιδιαιτερότητες"],["Βαφή"],["Κόστος υλικού","r"],["Τιμή κόστους","r"],["Τιμή πώλησης","r"],["Με ΦΠΑ 24%","r"],["Κέρδος (χωρίς ΦΠΑ)","r"]],
+      list.map(r => `<tr ${r.id ? `data-prod="${esc(r.id)}"` : `data-newprod="${esc(r.nk)}"`} title="${esc(r.name)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.code)}</td><td>${esc(r.desc)}</td><td class="r num">${esc(r.thick)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td>${r.id ? `<select class="sheetSel" data-id="${esc(r.id)}"><option value="">–</option>${SHEET_TYPES.map(t => `<option ${r.sheet === t ? "selected" : ""}>${t}</option>`).join("")}</select>` : "–"}</td><td>${esc(r.extras.join(", "))}</td><td>${esc(r.paint)}</td><td class="r num">${r.matCost != null ? eur(r2(r.matCost)) : "–"}</td><td class="r num">${r.manCost != null ? eur(r.manCost) : "–"}</td><td class="r num">${eur(r.price)}</td><td class="r num"><b>${r.price != null ? eur(r2(r.price * 1.24)) : "–"}</b></td><td class="r num">${r.cost != null && r.price != null ? `${eur(r2(r.price - r.cost))} <span class="hint">${pct((r.price - r.cost) / r.price, 1)}</span>` : "–"}</td></tr>`))}
       </div>`;
     applySorts($("prodList"), "products");
     fitProd();

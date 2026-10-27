@@ -809,6 +809,43 @@ select.reason{font-size:.82rem;padding:4px 6px}
     return d ? (L + 2 * d + dp) * (W + 2 * d + dp) : L * W;
   }
   function costOf(p){ const s = SHEET[p.sheetType], a = blankArea(p), t = effThick(p); return s && s.eurKg != null && a && t ? a / 1e4 * t * s.density * s.eurKg : null; }
+  // Rearrangeable/resizable columns on the products table; layout persists in localStorage until unlocked again.
+  let colEdit = false;
+  const LKEY = "cols:products";
+  function tblCols(t){ return [...t.tHead.rows[0].cells].map(th => th.textContent.trim()); }
+  function applyLayout(t, L){
+    const cur = tblCols(t), order = L.order.filter(x => cur.includes(x));
+    cur.forEach(x => { if (!order.includes(x)) order.push(x); });
+    const idx = order.map(x => cur.indexOf(x));
+    [...t.rows].forEach(r => { const cs = [...r.cells]; idx.forEach(i => r.appendChild(cs[i])); });
+    [...t.tHead.rows[0].cells].forEach(th => { const w = L.widths[th.textContent.trim()]; if (w) th.style.width = w + "px"; });
+  }
+  function initColEdit(){
+    const t = $("prodList").querySelector("table.dtable"); if (!t) return;
+    const L = JSON.parse(localStorage[LKEY] || "null"); if (L) applyLayout(t, L);
+    const ths = [...t.tHead.rows[0].cells];
+    ths.forEach(th => { th.draggable = colEdit; th.style.cursor = colEdit ? "grab" : ""; });
+    if (!t._colw) {
+      t._colw = 1; let dragTh = null, resTh = null, resX = 0;
+      t.addEventListener("dragstart", e => { if (colEdit && e.target.tagName === "TH") dragTh = e.target; });
+      t.addEventListener("dragover", e => { if (colEdit) e.preventDefault(); });
+      t.addEventListener("drop", e => { const th = e.target.closest("th"); if (!colEdit || !th || !dragTh || th === dragTh) return;
+        const row = dragTh.parentNode, cs = [...row.cells], i = cs.indexOf(dragTh), j = cs.indexOf(th);
+        [...t.rows].forEach(r => { const c = r.cells[i]; j > i ? r.cells[j].after(c) : r.cells[j].before(c); });
+        saveLayout(t);
+      });
+      // Min width = the widest cell content in that column (so text is never clipped).
+      const ctx = document.createElement("canvas").getContext("2d");
+      const minWOf = th => { const i = [...th.parentNode.cells].indexOf(th); let m = 0;
+        [...t.rows].forEach(r => { const c = r.cells[i]; if (!c) return; ctx.font = getComputedStyle(c).font; m = Math.max(m, ctx.measureText(c.textContent).width); });
+        return Math.ceil(m) + 20; };
+      let resMin = 40;
+      t.addEventListener("mousedown", e => { const th = e.target.closest("th"); if (colEdit && th && e.offsetX > th.offsetWidth - 8) { resTh = th; resX = e.clientX; resMin = minWOf(th); e.preventDefault(); } });
+      window.addEventListener("mousemove", e => { if (resTh) { resTh.style.width = Math.max(resMin, resTh.offsetWidth + e.clientX - resX) + "px"; resX = e.clientX; } });
+      window.addEventListener("mouseup", () => { if (resTh) { saveLayout(t); resTh = null; } });
+    }
+  }
+  function saveLayout(t){ const L = {order: tblCols(t), widths: {}}; [...t.tHead.rows[0].cells].forEach(th => { if (th.style.width) L.widths[th.textContent.trim()] = parseInt(th.style.width); }); localStorage[LKEY] = JSON.stringify(L); }
   function renderCatalog(q){
     const u = usage();
     const rows = [];
@@ -823,10 +860,11 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const list = rows.filter(r => pass(r)).sort((a,b) => a.cat.localeCompare(b.cat, "el") || cmpSize(a.size, b.size) || a.name.localeCompare(b.name, "el", {numeric:true}));
     const active = pf.cat !== "all" || pf.dim || pf.shape !== "all" || pf.thick !== "all" || pf.mat !== "all" || pf.paint !== "all" || pf.feat !== "all";
     const sel = (id, label, all, o) => `<label for="${id}">${label}</label><select id="${id}"><option value="all">${all}</option>${o}</select>`;
-    $("prodList").innerHTML = `<div class="periodbar">${sel("prodCat", "Κατηγορία", "Όλες", catO)}<label for="prodDim">Διάσταση</label><input type="search" id="prodDim" placeholder="π.χ. 30×20" value="${esc(pf.dim)}">${sel("prodShape", "Σχήμα", "Όλα", shapeO)}${sel("prodMat", "Υλικό", "Όλα", matO)}${sel("prodThick", "Πάχος (χιλ.)", "Όλα", thickO)}${sel("prodFeat", "Ιδιαιτερότητα", "Όλες", featO)}${sel("prodPaint", "Βαφή", "Όλα", paintO)}${active ? `<button type="button" id="prodClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα</span></div><div class="custbody"><p class="hint">Η τιμή πώλησης είναι η αρχική, πριν από την έκπτωση κάθε πελάτη. Το κόστος υλικού είναι ενδεικτικό (κράμα 1050: 6 €/κιλό· 1200 και 430 χωρίς τιμή ακόμα) και βγαίνει αυτόματα όταν υπάρχουν διαστάσεις και πάχος. Στην «Τιμή κόστους» μπορείς να βάλεις το συνολικό κόστος (υλικό+εργασία) όταν το ξέρεις. Στα στρογγυλά/πρεσαριστά το κόστος βγαίνει από το «Ανάπτυγμα» της καρτέλας (διάμετρος δίσκου).</p>${tbl([["Κατηγορία"],["Κωδικός"],["Περιγραφή · Μήκος × Πλάτος × Ύψος"],["Πάχος (χιλ.)","r"],["Υλικό"],["Τύπος υλικού"],["Ανάπτυγμα"],["Ιδιαιτερότητες"],["Βαφή"],["Κόστος υλικού","r"],["Τιμή κόστους","r"],["Τιμή πώλησης","r"],["Με ΦΠΑ 24%","r"],["Κέρδος (χωρίς ΦΠΑ)","r"]],
+    $("prodList").innerHTML = `<div class="periodbar">${sel("prodCat", "Κατηγορία", "Όλες", catO)}<label for="prodDim">Διάσταση</label><input type="search" id="prodDim" placeholder="π.χ. 30×20" value="${esc(pf.dim)}">${sel("prodShape", "Σχήμα", "Όλα", shapeO)}${sel("prodMat", "Υλικό", "Όλα", matO)}${sel("prodThick", "Πάχος (χιλ.)", "Όλα", thickO)}${sel("prodFeat", "Ιδιαιτερότητα", "Όλες", featO)}${sel("prodPaint", "Βαφή", "Όλα", paintO)}${active ? `<button type="button" id="prodClear">Καθαρισμός</button>` : ""}<button type="button" id="colLock" title="Αλλαγή σειράς/πλάτους στηλών">${colEdit ? "Ξεκλείδωτες στήλες 🔓" : "Στήλες 🔒"}</button><span class="hint">${list.length} προϊόντα</span></div><div class="custbody"><p class="hint">Η τιμή πώλησης είναι η αρχική, πριν από την έκπτωση κάθε πελάτη. Το κόστος υλικού είναι ενδεικτικό (κράμα 1050: 6 €/κιλό· 1200 και 430 χωρίς τιμή ακόμα) και βγαίνει αυτόματα όταν υπάρχουν διαστάσεις και πάχος. Στην «Τιμή κόστους» μπορείς να βάλεις το συνολικό κόστος (υλικό+εργασία) όταν το ξέρεις. Στα στρογγυλά/πρεσαριστά το κόστος βγαίνει από το «Ανάπτυγμα» της καρτέλας (διάμετρος δίσκου).</p>${tbl([["Κατηγορία"],["Κωδικός"],["Περιγραφή · Μήκος × Πλάτος × Ύψος"],["Πάχος (χιλ.)","r"],["Υλικό"],["Τύπος υλικού"],["Ανάπτυγμα"],["Ιδιαιτερότητες"],["Βαφή"],["Κόστος υλικού","r"],["Τιμή κόστους","r"],["Τιμή πώλησης","r"],["Με ΦΠΑ 24%","r"],["Κέρδος (χωρίς ΦΠΑ)","r"]],
       list.map(r => `<tr ${r.id ? `data-prod="${esc(r.id)}"` : `data-newprod="${esc(r.nk)}"`} title="${esc(r.name)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.code)}</td><td>${esc(r.desc)}</td><td class="r num">${esc(r.thick)}</td><td>${esc(r.mat)}</td><td>${r.id ? `<select class="sheetSel" data-id="${esc(r.id)}"><option value="">–</option>${SHEET_TYPES.map(t => `<option ${r.sheet === t ? "selected" : ""}>${t}</option>`).join("")}</select>` : "–"}</td><td>${r.id ? `<input class="blankInp" data-id="${esc(r.id)}" value="${esc(r.blank)}" placeholder="Φ ή διαστ." size="10">` : "–"}</td><td>${esc(r.extras.join(", "))}</td><td>${esc(r.paint)}</td><td class="r num">${r.matCost != null ? eur(r2(r.matCost)) : "–"}</td><td class="r num">${r.id ? `<input class="costInp" data-id="${esc(r.id)}" value="${r.manCost != null ? r.manCost : ""}" inputmode="decimal" size="7">` : "–"}</td><td class="r num">${eur(r.price)}</td><td class="r num"><b>${r.price != null ? eur(r2(r.price * 1.24)) : "–"}</b></td><td class="r num">${r.cost != null && r.price != null ? `${eur(r2(r.price - r.cost))} <span class="hint">${pct((r.price - r.cost) / r.price, 1)}</span>` : "–"}</td></tr>`))}
       </div>`;
     applySorts($("prodList"), "products");
+    initColEdit();
     fitProd();
   }
   // Logical order inside a category: main size (Φ, Μ, Νο), then width, then height.
@@ -1230,6 +1268,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   document.addEventListener("input", e => { if (e.target.id !== "prodDim") return; pf.dim = e.target.value; render(); const i = $("prodDim"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } });
   document.addEventListener("click", e => { if (e.target.id === "aClear") { Object.keys(af).forEach(k => af[k] = "all"); render(); } });
   document.addEventListener("click", e => { if (e.target.id !== "prodClear") return; Object.assign(pf, {cat:"all", dim:"", shape:"all", thick:"all", mat:"all", paint:"all", feat:"all"}); render(); });
+  document.addEventListener("click", e => { if (e.target.id !== "colLock") return; colEdit = !colEdit; if (!colEdit) { const t = $("prodList").querySelector("table.dtable"); if (t) saveLayout(t); } render(); });
   document.addEventListener("click", e => {
     const th = e.target.closest("table.sortable th"); if (!th) return;
     const table = th.closest("table"), col = th.cellIndex, dir = th.dataset.dir ? (th.dataset.dir === "desc" ? "asc" : "desc") : (th.classList.contains("r") ? "desc" : "asc");

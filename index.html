@@ -76,6 +76,8 @@ details.cust summary::-webkit-details-marker{display:none}
 #prodList .tbox{overflow:auto}
 #prodList td:first-child{min-width:0}
 #prodList thead th{position:sticky;top:0;z-index:1;background:var(--surface);box-shadow:inset 0 -1px 0 var(--line)}
+table.coledit th,table.coledit td{box-shadow:inset -1px 0 0 rgba(110,110,110,.55)}
+table.coledit th{user-select:none}
 table{border-collapse:collapse;width:100%;font-size:.86rem}
 th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;white-space:nowrap}
@@ -821,7 +823,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
     [...t.tHead.rows[0].cells].forEach(th => { const w = L.widths[th.textContent.trim()]; if (w) th.style.width = w + "px"; });
   }
   function initColEdit(){
-    const t = $("prodList").querySelector("table.dtable"); if (!t) return;
+    const t = $("prodList").querySelector("table"); if (!t) return;
+    t.classList.toggle("coledit", colEdit);
     const L = JSON.parse(localStorage[LKEY] || "null"); if (L) applyLayout(t, L);
     const ths = [...t.tHead.rows[0].cells];
     ths.forEach(th => { th.draggable = colEdit; th.style.cursor = colEdit ? "grab" : ""; });
@@ -1268,9 +1271,9 @@ select.reason{font-size:.82rem;padding:4px 6px}
   document.addEventListener("input", e => { if (e.target.id !== "prodDim") return; pf.dim = e.target.value; render(); const i = $("prodDim"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } });
   document.addEventListener("click", e => { if (e.target.id === "aClear") { Object.keys(af).forEach(k => af[k] = "all"); render(); } });
   document.addEventListener("click", e => { if (e.target.id !== "prodClear") return; Object.assign(pf, {cat:"all", dim:"", shape:"all", thick:"all", mat:"all", paint:"all", feat:"all"}); render(); });
-  document.addEventListener("click", e => { if (e.target.id !== "colLock") return; colEdit = !colEdit; if (!colEdit) { const t = $("prodList").querySelector("table.dtable"); if (t) saveLayout(t); } render(); });
+  document.addEventListener("click", e => { if (e.target.id !== "colLock") return; colEdit = !colEdit; if (!colEdit) { const t = $("prodList").querySelector("table"); if (t) saveLayout(t); } render(); });
   document.addEventListener("click", e => {
-    const th = e.target.closest("table.sortable th"); if (!th) return;
+    const th = e.target.closest("table.sortable th"); if (!th || th.closest("table").classList.contains("coledit")) return;
     const table = th.closest("table"), col = th.cellIndex, dir = th.dataset.dir ? (th.dataset.dir === "desc" ? "asc" : "desc") : (th.classList.contains("r") ? "desc" : "asc");
     sortTable(table, col, dir); anaSort[table.dataset.sortKey] = {col, dir};
   });

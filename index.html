@@ -596,22 +596,32 @@ select.reason{font-size:.82rem;padding:4px 6px}
   const ymd = t => `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
   const curYM = () => ymd(new Date()).slice(0,7);
   const af = {cat:"all", shape:"all", mat:"all", feat:"all", paint:"all"}, ASEL = {aCat:"cat", aShape:"shape", aMat:"mat", aFeat:"feat", aPaint:"paint"};
-  let anaTab = "sum", anaPeriod = "M" + curYM(), anaFrom = "", anaTo = "", prevStats = null;
+  let anaTab = "sum", anaPeriod = "M", anaFrom = "", anaTo = "", prevStats = null;
   const anaSort = {};
   const MONTHS = ["Ιανουάριος","Φεβρουάριος","Μάρτιος","Απρίλιος","Μάιος","Ιούνιος","Ιούλιος","Αύγουστος","Σεπτέμβριος","Οκτώβριος","Νοέμβριος","Δεκέμβριος"];
-  // Periods: "all", "Y2026", "M2026-10" or "R" (custom from–to). Each maps to an inclusive [from, to] date range.
+  // Periods: "D" today, "W" current week (Mon–Sun), "H" current half-month, "M" current month, "Y" current year, "all", or "R" (custom from–to). Each maps to an inclusive [from, to] date range.
   function rangeOf(p){
     if (p === "all") return null;
-    if (p[0] === "Y") return [p.slice(1) + "-01-01", p.slice(1) + "-12-31"];
-    if (p[0] === "M") { const [y, m] = p.slice(1).split("-").map(Number); return [p.slice(1) + "-01", ymd(new Date(y, m, 0))]; }
+    const t = new Date(), y = t.getFullYear(), m = t.getMonth();
+    const mm = String(m + 1).padStart(2,"0");
+    if (p === "D") { const s = ymd(t); return [s, s]; }
+    if (p === "W") { const d = new Date(t); d.setDate(d.getDate() - (d.getDay() + 6) % 7); const e = new Date(d); e.setDate(e.getDate() + 6); return [ymd(d), ymd(e)]; }
+    if (p === "H") return t.getDate() <= 15 ? [`${y}-${mm}-01`, `${y}-${mm}-15`] : [`${y}-${mm}-16`, ymd(new Date(y, m + 1, 0))];
+    if (p === "M") return [`${y}-${mm}-01`, ymd(new Date(y, m + 1, 0))];
+    if (p === "Y") return [`${y}-01-01`, `${y}-12-31`];
     return [anaFrom || "0000-01-01", anaTo || "9999-12-31"];
   }
-  // The period right before, of the same length: previous month, previous year, or the same number of days.
+  const halfRange = t => t.getDate() <= 15 ? [ymd(new Date(t.getFullYear(), t.getMonth(), 1)), ymd(new Date(t.getFullYear(), t.getMonth(), 15))] : [ymd(new Date(t.getFullYear(), t.getMonth(), 16)), ymd(new Date(t.getFullYear(), t.getMonth() + 1, 0))];
+  const hLabel = t => `${t.getDate() <= 15 ? "1" : "16"} – ${t.getDate() <= 15 ? 15 : new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()} ${MONTHS[t.getMonth()]} ${t.getFullYear()}`;
+  // The period right before, of the same length: previous day, week, half-month, month, year, or the same number of days.
   function prevPeriod(){
-    const p = anaPeriod;
+    const p = anaPeriod, t = new Date();
     if (p === "all") return null;
-    if (p[0] === "Y") return {r: rangeOf("Y" + (+p.slice(1) - 1)), label: "Έτος " + (+p.slice(1) - 1)};
-    if (p[0] === "M") { const [y, m] = p.slice(1).split("-").map(Number), d = new Date(y, m - 2, 1); return {r: rangeOf("M" + ymd(d).slice(0,7)), label: MONTHS[d.getMonth()] + " " + d.getFullYear()}; }
+    if (p === "D") { const d = new Date(t); d.setDate(d.getDate() - 1); return {r: [ymd(d), ymd(d)], label: dt(ymd(d))}; }
+    if (p === "W") { const r = rangeOf("W"), f = new Date(r[0] + "T00:00"), e = new Date(r[1] + "T00:00"); f.setDate(f.getDate() - 7); e.setDate(e.getDate() - 7); return {r: [ymd(f), ymd(e)], label: `${dt(ymd(f))} – ${dt(ymd(e))}`}; }
+    if (p === "H") { const d = t.getDate() <= 15 ? new Date(t.getFullYear(), t.getMonth() - 1, 16) : new Date(t.getFullYear(), t.getMonth(), 1); return {r: halfRange(d), label: hLabel(d)}; }
+    if (p === "M") { const d = new Date(t.getFullYear(), t.getMonth() - 1, 1); return {r: [`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`, ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0))], label: MONTHS[d.getMonth()] + " " + d.getFullYear()}; }
+    if (p === "Y") return {r: [`${t.getFullYear() - 1}-01-01`, `${t.getFullYear() - 1}-12-31`], label: "Έτος " + (t.getFullYear() - 1)};
     if (!anaFrom || !anaTo) return null;
     const f = new Date(anaFrom + "T00:00"), days = Math.round((new Date(anaTo + "T00:00") - f) / 864e5) + 1;
     const pt = new Date(f); pt.setDate(pt.getDate() - 1); const pf0 = new Date(pt); pf0.setDate(pf0.getDate() - days + 1);
@@ -621,7 +631,14 @@ select.reason{font-size:.82rem;padding:4px 6px}
   const inPeriod = d => inRange(d, rangeOf(anaPeriod));
   function withRange(r, fn){ const all = docs; docs = all.filter(d => inRange(d, r)); try { return fn(); } finally { docs = all; } }
   function withPeriod(fn){ return withRange(rangeOf(anaPeriod), fn); }
-  const periodLabel = () => anaPeriod === "all" ? "" : anaPeriod === "R" ? `${dt(anaFrom)} – ${dt(anaTo)}` : anaPeriod[0] === "Y" ? "Έτος " + anaPeriod.slice(1) : MONTHS[+anaPeriod.slice(6) - 1] + " " + anaPeriod.slice(1,5);
+  const periodLabel = () => { const t = new Date();
+    if (anaPeriod === "all") return "";
+    if (anaPeriod === "D") return dt(ymd(t));
+    if (anaPeriod === "W" || anaPeriod === "R") { const r = rangeOf(anaPeriod); return `${dt(r[0])} – ${dt(r[1])}`; }
+    if (anaPeriod === "H") return hLabel(t);
+    if (anaPeriod === "M") return MONTHS[t.getMonth()] + " " + t.getFullYear();
+    return "Έτος " + t.getFullYear();
+  };
   function sumStats(){
     const {prods, totQ} = analysisData(), sales = docs.filter(d => d.purpose !== "Επιστροφή");
     const net = sales.reduce((a,d)=>{ const t = docTotals(d); return a + (t.priced ? t.net : 0); }, 0);
@@ -648,13 +665,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
     return trendSpan(dir, p);
   }
   function periodOptions(){
-    const ym = [...new Set(docs.map(d => String(d.date||"").slice(0,7)).filter(x => /^\d{4}-\d{2}$/.test(x)))].sort().reverse();
-    if (!ym.includes(curYM())) ym.unshift(curYM());
-    if (anaPeriod[0] === "M" && !ym.includes(anaPeriod.slice(1))) ym.push(anaPeriod.slice(1));
-    ym.sort().reverse();
-    const ys = [...new Set(ym.map(x => x.slice(0,4)))];
     const opt = (v,l) => `<option value="${v}" ${anaPeriod===v?"selected":""}>${l}</option>`;
-    return opt("all","Όλη η περίοδος") + opt("R","Συγκεκριμένη περίοδος…") + ys.map(y => opt("Y"+y, "Έτος " + y) + ym.filter(m => m.startsWith(y)).map(m => opt("M"+m, "  " + MONTHS[+m.slice(5)-1] + " " + y)).join("")).join("");
+    return opt("D","Σήμερα") + opt("W","Τρέχουσα εβδομάδα") + opt("H","Τρέχον δεκαπενθήμερο") + opt("M","Τρέχων μήνας") + opt("Y","Τρέχον έτος") + opt("all","Όλη η περίοδος") + opt("R","Συγκεκριμένη περίοδος…");
   }
   // Click-to-sort for analysis tables; numbers are read from Greek formatting (1.234,56 € / 14,9%).
   const cellVal = t => { const x = t.replace(/[€%\s]/g,"").replace(/\./g,"").replace(",","."); return /^[-+]?\d+(\.\d+)?$/.test(x) ? parseFloat(x) : null; };
@@ -1198,7 +1210,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const want = fold(catBuf), opt = [...e.target.options].find(o => o.value !== "all" && fold(o.value).startsWith(want));
     if (opt && opt.value !== pf[PSEL[id]]) { pf[PSEL[id]] = opt.value; render(); const sel = $(id); if (sel) sel.focus(); }
   });
-  document.addEventListener("change", e => { if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; if (anaPeriod === "R" && !anaFrom) { const r = rangeOf("M" + curYM()); anaFrom = r[0]; anaTo = r[1]; } render(); } if (e.target.id === "anaFrom" || e.target.id === "anaTo") { if (e.target.id === "anaFrom") anaFrom = e.target.value; else anaTo = e.target.value; render(); } if (PSEL[e.target.id]) { pf[PSEL[e.target.id]] = e.target.value; render(); } if (ASEL[e.target.id]) { af[ASEL[e.target.id]] = e.target.value; render(); } });
+  document.addEventListener("change", e => { if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; if (anaPeriod === "R" && !anaFrom) { const r = rangeOf("M"); anaFrom = r[0]; anaTo = r[1]; } render(); } if (e.target.id === "anaFrom" || e.target.id === "anaTo") { if (e.target.id === "anaFrom") anaFrom = e.target.value; else anaTo = e.target.value; render(); } if (PSEL[e.target.id]) { pf[PSEL[e.target.id]] = e.target.value; render(); } if (ASEL[e.target.id]) { af[ASEL[e.target.id]] = e.target.value; render(); } });
   document.addEventListener("input", e => { if (e.target.id !== "prodDim") return; pf.dim = e.target.value; render(); const i = $("prodDim"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } });
   document.addEventListener("click", e => { if (e.target.id === "aClear") { Object.keys(af).forEach(k => af[k] = "all"); render(); } });
   document.addEventListener("click", e => { if (e.target.id !== "prodClear") return; Object.assign(pf, {cat:"all", dim:"", shape:"all", thick:"all", mat:"all", paint:"all", feat:"all"}); render(); });

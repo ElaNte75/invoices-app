@@ -243,7 +243,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   <form class="panel" id="docForm">
     <h2 id="docTitle">Νέο παραστατικό</h2>
     <div class="grid">
-      <label>Είδος<select id="d_docType"><option>Τιμολόγιο</option><option>Δελτίο αποστολής</option><option>Τιμολόγιο - Δελτίο αποστολής</option></select></label>
+      <label>Είδος<select id="d_docType"><option>Τιμολόγιο</option><option>Δελτίο αποστολής</option><option>Τιμολόγιο - Δελτίο αποστολής</option><option>Παραγγελία (χωρίς παραστατικό)</option></select></label>
       <label>Ημερομηνία<input id="d_date" type="date"></label>
       <label>Αριθμός<input id="d_number"></label>
       <label>Σκοπός<select id="d_purpose"><option>Πώληση</option><option>Επιστροφή</option></select></label>
@@ -931,7 +931,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
       if (d.purpose !== "Επιστροφή" && d.delivery === "") out.push("Τρόπος παράδοσης / πρακτορείο: άγνωστο");
       if (d.delivery === "Πρακτορείο" && !d.agent) out.push("Όνομα πρακτορείου: λείπει");
       if (d.purpose !== "Επιστροφή" && !d.deliveryAddress) out.push("Τόπος παράδοσης: λείπει");
-      if (!d.mark && d.docType !== "Δελτίο αποστολής") out.push("ΜΑΡΚ: λείπει");
+      if (!d.mark && d.docType !== "Δελτίο αποστολής" && d.docType !== "Παραγγελία (χωρίς παραστατικό)") out.push("ΜΑΡΚ: λείπει");
     }
     todos.filter(t => t.scope === scope && t.refId === id && t.status !== "done").forEach(t => out.push({manual: true, id: t._id, text: t.text}));
     return out;

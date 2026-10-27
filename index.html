@@ -796,7 +796,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     return {cat: catName, desc, shape: p.shape || "", shapeF: p.shape || "Χωρίς σχήμα", thick, dim, dn: dimNorm(dim), mat: mat || "–", paint: painted ? "Βαμμένο" : "", paintF: painted ? "Βαμμένο" : "Άβαφο", extras};
   }
   // Ενδεικτικό κόστος υλικού: τιμή €/κιλό και ειδικό βάρος ανά είδος φύλλου (Inox AISI 430 ≈ 7,75).
-  const SHEET = {"Αλουμίνιο 1050":{eurKg:6,density:2.71},"Αλουμίνιο 1200":{eurKg:null,density:2.7},"Inox 430":{eurKg:null,density:7.75}};
+  const SHEET = {"Αλουμίνιο 1050":{eurKg:6,density:2.75},"Αλουμίνιο 1200":{eurKg:null,density:2.75},"Inox 430":{eurKg:null,density:7.75}};
   const SHEET_TYPES = Object.keys(SHEET);
   const LIP = 2; // εκ. χείλος ανά πλευρά στο ανάπτυγμα ταψιού
   const effThick = p => { if (p.thickness) return num(p.thickness); const m = (p.fullName || p.description || "").match(/–\s*([\d,.]+)\s*χιλ\./); return m ? num(m[1]) : null; };

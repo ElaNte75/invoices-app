@@ -1199,6 +1199,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   });
 
   document.addEventListener("click", e => {
+    if (e.target.closest && e.target.closest(".sheetSel")) return;
     const t = e.target.closest("[data-doc],[data-editcust],[data-newdocfor],[data-prod],[data-newprod],[data-agent],[data-done],[data-view],[data-custdocs],[data-opencust],[data-ctab],[data-atab],[data-prodcust],[data-opencustana]"); if (!t) return;
     if (t.dataset.view) return openView(t.dataset.view);
     if (t.dataset.opencust) { selCust = t.dataset.opencust; custTab = "info"; render(); window.scrollTo(0,0); return; }

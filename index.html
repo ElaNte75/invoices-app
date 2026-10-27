@@ -501,8 +501,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
   const key = s => String(s||"").trim().toLowerCase().replace(/\s+/g," ");
   const lines = d => Array.isArray(d.lines) ? d.lines : [];
   let catalog = [];
-  // A line links to the catalog by product code; otherwise to a special order by its invoice description.
-  const productFor = l => (l.code && catalog.find(p => p.type !== "special" && key(p.code) === key(l.code))) || catalog.find(p => p.type === "special" && key(p.description) === key(l.product)) || null;
+  // A line links by productId, else by product code (catalog) or invoice description (special).
+  const productFor = l => (l.productId && catalog.find(p => p._id === l.productId)) || (l.code && catalog.find(p => p.type !== "special" && key(p.code) === key(l.code))) || catalog.find(p => p.type === "special" && key(p.description) === key(l.product)) || null;
   const lineKey = l => { const p = productFor(l); return p ? "id:" + p._id : "d:" + key(l.product); };
   // Uniform casing: unclassified invoice text (ALL CAPS) is shown in sentence case.
   const pretty = t => { t = String(t || "").trim(); if (!t || /[α-ωά-ώ]/.test(t)) return t; let x = t.toLocaleLowerCase("el").replace(/σ(?=[^α-ωά-ώa-z]|$)/g, "ς").replace(/(\d)\s*[χx]\s*(?=\d)/g, "$1×"); return x.charAt(0).toLocaleUpperCase("el") + x.slice(1); };

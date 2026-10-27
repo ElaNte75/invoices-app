@@ -289,6 +289,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
       <label class="full">Αποκλειστικό για πελάτη (δική του σφραγίδα)<input id="p_exclusiveFor" placeholder="κενό = για όλους"></label>
       <label>Κόστος παραγωγής €<input id="p_costPrice" inputmode="decimal"></label>
       <label>Υλικό<input id="p_material" placeholder="π.χ. Αλουμίνιο"></label>
+      <label>Είδος φύλλου<select id="p_sheetType"><option value="">—</option><option>Μαλακό αλουμίνιο</option><option>Σκληρό αλουμίνιο</option><option>Inox</option></select></label>
       <label>Σχήμα<select id="p_shape"><option></option><option>Στρογγυλό</option><option>Ορθογώνιο</option><option>Τετράγωνο</option><option>Άλλο</option></select></label>
       <label>Διάμετρος Ν (εκ.)<input id="p_diameter" inputmode="decimal"></label>
       <label>Μήκος (εκ.)<input id="p_length" inputmode="decimal"></label>
@@ -794,11 +795,23 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const desc = name.replace(/\s*–\s*[\d,.]+\s*χιλ\./, "").replace(/\s*(?:από\s+)?(?:αλουμιν|ανοξείδωτ|βαμμέν)\S*/gi, "").replace(/(^|[\s×(])[ΜΠΥ](?=\d)/g, "$1").replace(/\s{2,}/g, " ").trim() + (p.unit ? ` (τιμή ανά ${p.unit})` : "");
     return {cat: catName, desc, shape: p.shape || "", shapeF: p.shape || "Χωρίς σχήμα", thick, dim, dn: dimNorm(dim), mat: mat || "–", paint: painted ? "Βαμμένο" : "", paintF: painted ? "Βαμμένο" : "Άβαφο", extras};
   }
+  // Ενδεικτικό κόστος υλικού: τιμή €/κιλό και ειδικό βάρος ανά είδος φύλλου (Inox AISI 430 ≈ 7,75).
+  const SHEET = {"Μαλακό αλουμίνιο":{eurKg:6,density:2.75},"Σκληρό αλουμίνιο":{eurKg:null,density:2.75},"Inox":{eurKg:null,density:7.75}};
+  const SHEET_TYPES = Object.keys(SHEET);
+  const LIP = 2; // εκ. χείλος ανά πλευρά στο ανάπτυγμα ταψιού
+  const effThick = p => { if (p.thickness) return num(p.thickness); const m = (p.fullName || p.description || "").match(/–\s*([\d,.]+)\s*χιλ\./); return m ? num(m[1]) : null; };
+  function blankArea(p){
+    const L = num(p.length), W = num(p.width); if (!L || !W) return null;
+    const d = num(p.depth) || 0;
+    if ((p.category || "").startsWith("Τσέρκι")) return (2 * (L + W) + 2) * (d + 1);
+    return d ? (L + 2 * (d + LIP)) * (W + 2 * (d + LIP)) : L * W;
+  }
+  function costOf(p){ const s = SHEET[p.sheetType], a = blankArea(p), t = effThick(p); return s && s.eurKg != null && a && t ? a / 1e4 * t * s.density * s.eurKg : null; }
   function renderCatalog(q){
     const u = usage();
     const rows = [];
     catalog.forEach(p => { const lp = listPriceAt(p); const price = lp ? num(lp.price) : lastInvoicedPrice(l => productFor(l) === p);
-      rows.push(Object.assign({id: p._id, size: sizeKey(p.fullName || p.description, p), code: p.code, name: (p.fullName || pretty(p.description)) + (p.unit ? ` (τιμή ανά ${p.unit})` : ""), cost: num(p.costPrice), price}, prodCols(p, p.type === "special" ? "Ειδική κατασκευή" : (p.category || "Χωρίς κατηγορία")))); });
+      rows.push(Object.assign({id: p._id, size: sizeKey(p.fullName || p.description, p), code: p.code, name: (p.fullName || pretty(p.description)) + (p.unit ? ` (τιμή ανά ${p.unit})` : ""), sheet: p.sheetType || "", cost: costOf(p) ?? num(p.costPrice), price}, prodCols(p, p.type === "special" ? "Ειδική κατασκευή" : (p.category || "Χωρίς κατηγορία")))); });
     [...u.values()].filter(x => x.k.startsWith("d:")).forEach(x => rows.push(Object.assign({id: "", nk: x.k, size: sizeKey(x.desc), code: x.code, name: pretty(x.desc), cost: null, price: lastInvoicedPrice(l => lineKey(l) === x.k)}, prodCols({description: x.desc}, "Δεν έχει ταξινομηθεί"))));
     const dq = dimNorm(pf.dim), dre = dq ? new RegExp("(^|[^0-9,])" + dq.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) : null;
     // Faceted filters: each list only offers values found among products matching all the other filters.
@@ -808,8 +821,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const list = rows.filter(r => pass(r)).sort((a,b) => a.cat.localeCompare(b.cat, "el") || cmpSize(a.size, b.size) || a.name.localeCompare(b.name, "el", {numeric:true}));
     const active = pf.cat !== "all" || pf.dim || pf.shape !== "all" || pf.thick !== "all" || pf.mat !== "all" || pf.paint !== "all" || pf.feat !== "all";
     const sel = (id, label, all, o) => `<label for="${id}">${label}</label><select id="${id}"><option value="all">${all}</option>${o}</select>`;
-    $("prodList").innerHTML = `<div class="periodbar">${sel("prodCat", "Κατηγορία", "Όλες", catO)}<label for="prodDim">Διάσταση</label><input type="search" id="prodDim" placeholder="π.χ. 30×20" value="${esc(pf.dim)}">${sel("prodShape", "Σχήμα", "Όλα", shapeO)}${sel("prodMat", "Υλικό", "Όλα", matO)}${sel("prodThick", "Πάχος (χιλ.)", "Όλα", thickO)}${sel("prodFeat", "Ιδιαιτερότητα", "Όλες", featO)}${sel("prodPaint", "Βαφή", "Όλα", paintO)}${active ? `<button type="button" id="prodClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα</span></div><div class="custbody"><p class="hint">Η τιμή πώλησης είναι η αρχική, πριν από την έκπτωση κάθε πελάτη. Το κόστος παραγωγής θα συμπληρωθεί όταν έχουμε τα στοιχεία.</p>${tbl([["Κατηγορία"],["Κωδικός"],["Περιγραφή · Μήκος × Πλάτος × Ύψος"],["Σχήμα"],["Υλικό"],["Πάχος (χιλ.)","r"],["Ιδιαιτερότητες"],["Βαφή"],["Κόστος παραγωγής","r"],["Τιμή πώλησης","r"],["Με ΦΠΑ 24%","r"]],
-      list.map(r => `<tr ${r.id ? `data-prod="${esc(r.id)}"` : `data-newprod="${esc(r.nk)}"`} title="${esc(r.name)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.code)}</td><td>${esc(r.desc)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td class="r num">${esc(r.thick)}</td><td>${esc(r.extras.join(", "))}</td><td>${esc(r.paint)}</td><td class="r num">${r.cost != null ? eur(r.cost) : "–"}</td><td class="r num">${eur(r.price)}</td><td class="r num"><b>${r.price != null ? eur(r2(r.price * 1.24)) : "–"}</b></td></tr>`))}
+    $("prodList").innerHTML = `<div class="periodbar">${sel("prodCat", "Κατηγορία", "Όλες", catO)}<label for="prodDim">Διάσταση</label><input type="search" id="prodDim" placeholder="π.χ. 30×20" value="${esc(pf.dim)}">${sel("prodShape", "Σχήμα", "Όλα", shapeO)}${sel("prodMat", "Υλικό", "Όλα", matO)}${sel("prodThick", "Πάχος (χιλ.)", "Όλα", thickO)}${sel("prodFeat", "Ιδιαιτερότητα", "Όλες", featO)}${sel("prodPaint", "Βαφή", "Όλα", paintO)}${active ? `<button type="button" id="prodClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα</span></div><div class="custbody"><p class="hint">Η τιμή πώλησης είναι η αρχική, πριν από την έκπτωση κάθε πελάτη. Το κόστος είναι ενδεικτικό υλικού (μαλακό αλουμίνιο 1050: 6 €/κιλό) και βγαίνει αυτόματα όταν υπάρχουν διαστάσεις και πάχος.</p>${tbl([["Κατηγορία"],["Κωδικός"],["Περιγραφή · Μήκος × Πλάτος × Ύψος"],["Σχήμα"],["Υλικό"],["Πάχος (χιλ.)","r"],["Ιδιαιτερότητες"],["Βαφή"],["Φύλλο"],["Κόστος παραγωγής","r"],["Τιμή πώλησης","r"],["Με ΦΠΑ 24%","r"]],
+      list.map(r => `<tr ${r.id ? `data-prod="${esc(r.id)}"` : `data-newprod="${esc(r.nk)}"`} title="${esc(r.name)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.code)}</td><td>${esc(r.desc)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td class="r num">${esc(r.thick)}</td><td>${esc(r.extras.join(", "))}</td><td>${esc(r.paint)}</td><td>${r.id ? `<select class="sheetSel" data-id="${esc(r.id)}"><option value="">–</option>${SHEET_TYPES.map(t => `<option ${r.sheet === t ? "selected" : ""}>${t}</option>`).join("")}</select>` : "–"}</td><td class="r num">${r.cost != null ? eur(r.cost) : "–"}</td><td class="r num">${eur(r.price)}</td><td class="r num"><b>${r.price != null ? eur(r2(r.price * 1.24)) : "–"}</b></td></tr>`))}
       </div>`;
     applySorts($("prodList"), "products");
     fitProd();
@@ -827,7 +840,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   // Products table scrolls on its own; header, tabs, filter and column titles stay put.
   function fitProd(){ const box = $("prodList").querySelector(".tbox"); if (!box || $("prodList").hidden) return; box.style.maxHeight = ""; const top = box.getBoundingClientRect().top + window.scrollY; box.style.maxHeight = Math.max(240, window.innerHeight - top - 64) + "px"; }
   window.addEventListener("resize", fitProd);
-  const PF = ["type","code","description","fullName","category","exclusiveFor","costPrice","material","shape","diameter","length","width","depth","thickness","border","conical","blank","notes"];
+  const PF = ["type","code","description","fullName","category","exclusiveFor","costPrice","material","sheetType","shape","diameter","length","width","depth","thickness","border","conical","blank","notes"];
   let editingProd = null;
   function openProd(id, preset){
     editingProd = id;
@@ -1210,7 +1223,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const want = fold(catBuf), opt = [...e.target.options].find(o => o.value !== "all" && fold(o.value).startsWith(want));
     if (opt && opt.value !== pf[PSEL[id]]) { pf[PSEL[id]] = opt.value; render(); const sel = $(id); if (sel) sel.focus(); }
   });
-  document.addEventListener("change", e => { if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; if (anaPeriod === "R" && !anaFrom) { const r = rangeOf("M"); anaFrom = r[0]; anaTo = r[1]; } render(); } if (e.target.id === "anaFrom" || e.target.id === "anaTo") { if (e.target.id === "anaFrom") anaFrom = e.target.value; else anaTo = e.target.value; render(); } if (PSEL[e.target.id]) { pf[PSEL[e.target.id]] = e.target.value; render(); } if (ASEL[e.target.id]) { af[ASEL[e.target.id]] = e.target.value; render(); } });
+  document.addEventListener("change", e => { if (e.target.classList && e.target.classList.contains("sheetSel")) { const id = e.target.dataset.id, p = catalog.find(x => x._id === id); if (p) { p.sheetType = e.target.value; if (db) db.collection("products").doc(id).update({sheetType: e.target.value, updatedAt: new Date().toISOString()}).then(() => setStatus("Αποθηκεύτηκε."), () => setStatus("Η αποθήκευση απέτυχε.", true)); } render(); return; } if (e.target.id === "anaPeriod") { anaPeriod = e.target.value; if (anaPeriod === "R" && !anaFrom) { const r = rangeOf("M"); anaFrom = r[0]; anaTo = r[1]; } render(); } if (e.target.id === "anaFrom" || e.target.id === "anaTo") { if (e.target.id === "anaFrom") anaFrom = e.target.value; else anaTo = e.target.value; render(); } if (PSEL[e.target.id]) { pf[PSEL[e.target.id]] = e.target.value; render(); } if (ASEL[e.target.id]) { af[ASEL[e.target.id]] = e.target.value; render(); } });
   document.addEventListener("input", e => { if (e.target.id !== "prodDim") return; pf.dim = e.target.value; render(); const i = $("prodDim"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } });
   document.addEventListener("click", e => { if (e.target.id === "aClear") { Object.keys(af).forEach(k => af[k] = "all"); render(); } });
   document.addEventListener("click", e => { if (e.target.id !== "prodClear") return; Object.assign(pf, {cat:"all", dim:"", shape:"all", thick:"all", mat:"all", paint:"all", feat:"all"}); render(); });

@@ -211,6 +211,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     <button role="tab" id="tabC" aria-selected="true" type="button">Πελάτες</button>
     <button role="tab" id="tabP" aria-selected="false" type="button">Προϊόντα</button>
     <button role="tab" id="tabG" aria-selected="false" type="button">Πρακτορεία</button>
+    <button role="tab" id="tabH" aria-selected="false" type="button">Συνεργάτες</button>
     <button role="tab" id="tabT" aria-selected="false" type="button" hidden>Εκκρεμότητες</button>
     <button role="tab" id="tabA" aria-selected="false" type="button">Ανάλυση</button>
   </div>
@@ -225,6 +226,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
   <div class="list" id="docList" hidden></div>
   <div class="list" id="prodList" hidden></div>
   <div class="list" id="agList" hidden></div>
+  <div class="list" id="partList" hidden></div>
   <div class="list" id="todoList" hidden></div>
   <div class="list" id="anaList" hidden></div>
 </div>
@@ -341,6 +343,29 @@ select.reason{font-size:.82rem;padding:4px 6px}
   </form>
 </div>
 
+<div class="sheet" id="partSheet" hidden>
+  <form class="panel" id="partForm">
+    <h2>Συνεργάτης</h2>
+    <p class="hint">Προμηθευτές και συνεργεία (π.χ. κατεργασία, βαφή, πριτσίνια, εργαλεία). Συμπληρώνεται σταδιακά, όταν έρχονται δελτία από αυτούς.</p>
+    <div class="grid">
+      <label class="full">Επωνυμία<input id="h_name"></label>
+      <label>Όνομα (όπως τον λέμε)<input id="h_shortName"></label>
+      <label>Ρόλος<input id="h_role" placeholder="π.χ. Κατεργασία, Βαφή, Πρώτη ύλη"></label>
+      <label class="full">Επάγγελμα<input id="h_profession"></label>
+      <label>ΑΦΜ<input id="h_afm" inputmode="numeric"></label>
+      <label>ΔΟΥ<input id="h_doy"></label>
+      <label class="full">Διεύθυνση<input id="h_address"></label>
+      <label>Πόλη<input id="h_city"></label>
+      <label>Τηλέφωνο<input id="h_phone" inputmode="tel"></label>
+      <label class="full">Σημειώσεις<textarea id="h_notes"></textarea></label>
+    </div>
+    <div class="row"><div class="right">
+      <button type="button" id="partCancel">Άκυρο</button>
+      <button type="submit" class="primary" id="partSave">Αποθήκευση</button>
+    </div></div>
+  </form>
+</div>
+
 <div class="sheet" id="custSheet" hidden>
   <form class="panel" id="custForm">
     <h2>Στοιχεία πελάτη</h2>
@@ -373,7 +398,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
 (function(){
   const OWNER = "ElaNte75", REPO = "Invoices", BRANCH = "main";
   const API = localStorage.getItem("gh_api") || "https://api.github.com";
-  const COLS = { customers:"Πελάτης", documents:"Παραστατικό", products:"Προϊόν", agents:"Πρακτορείο", agentRoutes:"Προορισμός πρακτορείου", todos:"Εκκρεμότητα", priceNotes:"Σημείωση τιμής" };
+  const COLS = { customers:"Πελάτης", documents:"Παραστατικό", products:"Προϊόν", agents:"Πρακτορείο", agentRoutes:"Προορισμός πρακτορείου", todos:"Εκκρεμότητα", priceNotes:"Σημείωση τιμής", partners:"Συνεργάτης", partnerDocs:"Δελτίο συνεργάτη" };
   const store = {}, listeners = {};
   let head = null, loading = null;
   Object.keys(COLS).forEach(c => { store[c] = new Map(); listeners[c] = []; });
@@ -539,7 +564,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     return [...map.values()].sort((a,b) => b.qty - a.qty);
   }
 
-  let priceNotes = [], agents = [], routes = [], todos = [];
+  let priceNotes = [], agents = [], routes = [], todos = [], partners = [], partnerDocs = [];
   const REASONS = ["","Δεν περάστηκε η έκπτωση","Αύξηση τιμής","Λάθος τιμολόγησης","Αλλαγή συμφωνίας","Ειδική τιμή / προσφορά","Άλλο"];
   function listPriceAt(p, date){
     const h = (Array.isArray(p && p.priceHistory) ? p.priceHistory : []).filter(x => num(x.price) != null && (!date || !x.from || x.from <= date)).sort((a,b)=>String(a.from||"").localeCompare(String(b.from||"")));
@@ -983,6 +1008,50 @@ select.reason{font-size:.82rem;padding:4px 6px}
     } catch { setStatus("Η αποθήκευση απέτυχε.", true); } finally { $("agSave").disabled = false; }
   });
 
+  // Συνεργάτες: προμηθευτές/συνεργεία και τα δελτία κατεργασίας που τους στέλνουμε (δίσκοι προς κατεργασία, χωρίς τιμές).
+  function partnerDocHTML(d){
+    const ls = lines(d), tot = ls.reduce((a,l) => a + (num(l.qty) || 0), 0);
+    const rows = ls.map(l => { const p = l.productId && catalog.find(x => x._id === l.productId); const t = num(l.discThickness), dd = num(l.discDiameter);
+      return `<tr><td class="num">${esc(l.code)}</td><td>${p ? esc(p.fullName) : `${esc(l.product)} <span class="badge warn">προς επιβεβαίωση</span>`}${l.note ? `<br><span class="hint">${esc(l.note)}</span>` : ""}</td><td class="num">${t != null ? qn(t) + " χιλ." : "–"}</td><td class="num">${dd != null ? "Φ" + qn(dd / 10) + " εκ." : "–"}</td><td class="r num">${qn(num(l.qty))}</td></tr>`; }).join("");
+    return `<div class="lines"><b>${esc(d.docType)} ${esc(d.number)}</b> · ${dt(d.date)} · ${qn(tot)} τεμ.${d.material ? " · " + esc(d.material) : ""}${d.vehicle ? " · " + esc(d.vehicle) : ""}</div>
+      <div class="tbox"><table><thead><tr><th>Κωδ. δίσκου</th><th>Προϊόν</th><th>Πάχος</th><th>Δίσκος (ανάπτυγμα)</th><th class="r">Ποσ.</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  function renderPartners(q){
+    const fq = fold(q);
+    const list = partners.filter(h => !fq || [h.name, h.shortName, h.role, h.profession, h.afm, h.city].some(v => fold(v).includes(fq)));
+    $("partList").innerHTML = `<div><button type="button" class="small" id="newPartner">+ Νέος συνεργάτης</button></div>
+      <h4>Συνεργάτες (${partners.length})</h4>` + (list.length ? list.slice().sort((a,b)=>String(a.shortName||a.name).localeCompare(String(b.shortName||b.name),"el")).map(h => {
+        const pd = partnerDocs.filter(d => d.partnerId === h._id).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+        return `<div class="docitem" data-partner="${esc(h._id)}"><div class="top"><span class="name">${esc(h.shortName || h.name)}</span>${h.role ? `<span class="badge">${esc(h.role)}</span>` : ""}</div>
+          <div class="meta"><span>${esc(h.name)}</span>${h.afm ? `<span class="num">ΑΦΜ ${esc(h.afm)}</span>` : ""}${h.doy ? `<span>ΔΟΥ ${esc(h.doy)}</span>` : ""}</div>
+          <div class="meta"><span>${esc([h.address, h.city].filter(Boolean).join(", "))}</span>${h.phone ? `<span class="num">Τηλ. ${esc(h.phone)}</span>` : ""}</div>
+          ${h.profession ? `<div class="lines">${esc(h.profession)}</div>` : ""}${h.notes ? `<div class="lines hint">${esc(h.notes)}</div>` : ""}
+          ${pd.map(partnerDocHTML).join("")}</div>`; }).join("") : `<p class="hint">Δεν υπάρχουν ακόμα συνεργάτες.</p>`);
+    const nb = $("newPartner"); if (nb) nb.onclick = () => openPartner(null);
+  }
+  const HF = ["name","shortName","role","profession","afm","doy","address","city","phone","notes"];
+  let editingPartner = null;
+  function openPartner(id){
+    editingPartner = id; const h = partners.find(x => x._id === id) || {};
+    HF.forEach(k => $("h_"+k).value = h[k] || "");
+    $("partSheet").hidden = false;
+  }
+  $("partCancel").onclick = () => { $("partSheet").hidden = true; };
+  document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-partner]"); if (t) openPartner(t.dataset.partner); });
+  $("partForm").addEventListener("submit", async e => {
+    e.preventDefault(); if (!db) return;
+    const data = {}; HF.forEach(k => data[k] = $("h_"+k).value.trim());
+    if (!data.name) return setStatus("Δώσε επωνυμία συνεργάτη.", true);
+    data.updatedAt = new Date().toISOString();
+    $("partSave").disabled = true;
+    try {
+      const id = editingPartner || (data.afm ? "afm-" + data.afm.replace(/[^0-9A-Za-z]/g,"") : null);
+      const ref = id ? db.collection("partners").doc(id) : db.collection("partners").doc();
+      const body = Object.assign({}, partners.find(x => x._id === ref.id) || {}, data); delete body._id; await ref.set(body);
+      $("partSheet").hidden = true; setStatus("Αποθηκεύτηκε.");
+    } catch { setStatus("Η αποθήκευση απέτυχε.", true); } finally { $("partSave").disabled = false; }
+  });
+
   // Open items: checked automatically from the data, plus notes added by hand.
   const pend = v => /προς επιβεβαίωση|κομμένο/i.test(String(v||""));
   function issuesFor(scope, id){
@@ -1128,13 +1197,14 @@ select.reason{font-size:.82rem;padding:4px 6px}
     $("empty").hidden = !!any;
     const ym = curYM(), nMonth = docs.filter(d => String(d.date || "").startsWith(ym)).length;
     $("totals").innerHTML = any ? `<span>Παραστατικά ${MONTHS[+ym.slice(5) - 1]} ${ym.slice(0,4)}&nbsp; <b>(${nMonth})</b></span>` : "";
-    $("tabC").textContent = `Πελάτες (${customers.length})`; $("tabP").textContent = `Προϊόντα (${catalog.length})`; $("tabG").textContent = `Πρακτορεία (${agents.length})`;
-    $("custList").hidden = tab !== "C"; $("docList").hidden = tab !== "D"; $("anaList").hidden = tab !== "A"; $("prodList").hidden = tab !== "P"; $("agList").hidden = tab !== "G"; $("todoList").hidden = tab !== "T"; $("q").hidden = tab === "A" || (tab === "C" && !!selCust);
-    ["C","P","G","T","A"].forEach(t => $("tab"+t).setAttribute("aria-selected", tab === t));
+    $("tabC").textContent = `Πελάτες (${customers.length})`; $("tabP").textContent = `Προϊόντα (${catalog.length})`; $("tabG").textContent = `Πρακτορεία (${agents.length})`; $("tabH").textContent = `Συνεργάτες (${partners.length})`;
+    $("custList").hidden = tab !== "C"; $("docList").hidden = tab !== "D"; $("anaList").hidden = tab !== "A"; $("prodList").hidden = tab !== "P"; $("agList").hidden = tab !== "G"; $("partList").hidden = tab !== "H"; $("todoList").hidden = tab !== "T"; $("q").hidden = tab === "A" || (tab === "C" && !!selCust);
+    ["C","P","G","H","T","A"].forEach(t => $("tab"+t).setAttribute("aria-selected", tab === t));
     $("agentNames").innerHTML = [...new Set(docs.map(d => (d.agent||"").trim()).filter(Boolean))].sort().map(a => `<option value="${esc(a)}">`).join("");
     if (tab === "A") renderAnalysis();
     if (tab === "P") renderCatalog(q);
     if (tab === "G") renderAgents(q);
+    if (tab === "H") renderPartners(q);
     if (tab === "T") renderTodos(q);
     $("catNames").innerHTML = [...new Set(catalog.map(p => p.category).filter(Boolean))].sort().map(c => `<option value="${esc(c)}">`).join("");
     $("prodNames").innerHTML = [...new Set(docs.flatMap(d => lines(d).map(l => (l.product||"").trim())).filter(Boolean))].sort().map(p => `<option value="${esc(p)}">`).join("");
@@ -1282,13 +1352,14 @@ select.reason{font-size:.82rem;padding:4px 6px}
     try { await db.collection("priceNotes").doc(sel.dataset.note).set({reason: sel.value, updatedAt: new Date().toISOString()}); setStatus("Η αιτία αποθηκεύτηκε."); }
     catch { setStatus("Η αποθήκευση απέτυχε.", true); }
   });
-  ["docSheet","custSheet","prodSheet","agSheet","listSheet","viewSheet"].forEach(id => $(id).addEventListener("click", e => { if (e.target === $(id)) $(id).hidden = true; }));
+  ["docSheet","custSheet","prodSheet","agSheet","partSheet","listSheet","viewSheet"].forEach(id => $(id).addEventListener("click", e => { if (e.target === $(id)) $(id).hidden = true; }));
   $("tabC").onclick = () => { tab = "C"; selCust = null; render(); };
   document.addEventListener("click", e => { if (e.target.id === "backCust") { selCust = null; render(); } });
   $("tabA").onclick = () => { tab = "A"; render(); };
   $("tabP").onclick = () => { tab = "P"; render(); };
   $("tabG").onclick = () => { tab = "G"; render(); };
   $("tabT").onclick = () => { tab = "T"; render(); };
+  $("tabH").onclick = () => { tab = "H"; render(); };
   $("q").addEventListener("input", render);
 
   // ----- export -----
@@ -1332,6 +1403,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
     db.collection("customers").onSnapshot(s => { customers = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
     db.collection("todos").onSnapshot(s => { todos = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
     db.collection("agentRoutes").onSnapshot(s => { routes = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
+    db.collection("partners").onSnapshot(s => { partners = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
+    db.collection("partnerDocs").onSnapshot(s => { partnerDocs = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
     db.collection("agents").onSnapshot(s => { agents = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
     db.collection("priceNotes").onSnapshot(s => { priceNotes = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
     db.collection("products").onSnapshot(s => { catalog = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);

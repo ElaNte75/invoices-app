@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 4;
+  var VERSION = 5;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var S = fresh();
   var pick = { items: [], kind: "" };
@@ -45,7 +45,7 @@
       '</div><button class="small" data-act="sync">Αποστολή τώρα</button>' : "";
     return '<h1>Παραγγελίες</h1>' + pend + '<div class="stack">' +
       '<button class="big primary" data-act="new-order">Νέα παραγγελία</button>' +
-      '<button class="big" data-act="new-info">Νέα πληροφορία</button>' +
+      '<button class="big" data-act="new-info">Διόρθωση καταλόγου<small>πάχος, υλικό, διαστάσεις, περιγραφή</small></button>' +
       '<button class="big" data-act="history">Ιστορικό<small>' + n + " εγγραφές</small></button></div>" +
       '<p class="status">' + d.clients.length + " πελάτες · " + d.products.length + " προϊόντα · ενημερώθηκαν " + when + "</p>" +
       '<div class="row2"><button class="small" data-act="refresh">Ανανέωση δεδομένων</button>' +
@@ -75,13 +75,29 @@
     }).join("");
     $("list").innerHTML = html || '<p class="empty">Δεν βρέθηκε.</p>';
   }
+  /* Πόσες φορές έχει παραγγελθεί κάθε πελάτης και κάθε προϊόν (από το ιστορικό του κινητού) */
+  function usage() {
+    var u = { clients: {}, prods: {} };
+    O.store.all().forEach(function (r) {
+      if (r.kind !== "order") return;
+      if (r.clientId) u.clients[r.clientId] = (u.clients[r.clientId] || 0) + 1;
+      r.items.forEach(function (i) { if (i.id) u.prods[i.id] = (u.prods[i.id] || 0) + 1; });
+    });
+    return u;
+  }
   function vClient() {
-    return vPick("Πελάτης", "Γράψε για αναζήτηση", O.data.clients.map(function (c) { return { k: c.id, label: c.name, sub: c.city }; }), "client");
+    var u = usage().clients;
+    var list = O.data.clients.slice().sort(function (a, b) { return (u[b.id] || 0) - (u[a.id] || 0); });
+    return vPick("Πελάτης", "Γράψε για αναζήτηση", list.map(function (c) { return { k: c.id, label: c.name, sub: c.city }; }), "client");
   }
   function vCat() {
     var counts = {};
     O.data.products.forEach(function (p) { counts[p.cat] = (counts[p.cat] || 0) + 1; });
-    var items = Object.keys(counts).sort(function (a, b) { return a.localeCompare(b, "el"); }).map(function (c) {
+    var items = Object.keys(counts).sort(function (a, b) {
+      if (a === "Ειδική κατασκευή") return -1;
+      if (b === "Ειδική κατασκευή") return 1;
+      return a.localeCompare(b, "el");
+    }).map(function (c) {
       return { k: c, label: c, sub: counts[c] + " προϊόντα" };
     });
     return vPick("Κατηγορία", "Γράψε για αναζήτηση", items, "cat");
@@ -109,10 +125,12 @@
       '<div class="list" id="plist"></div>';
   }
   function drawProducts() {
-    var q = norm(S.q.trim());
+    var q = norm(S.q.trim()), u = usage().prods;
     var list = catProducts().filter(function (p) {
       return (!S.mat || p.mat === S.mat) && norm(p.name + " " + p.mat + " " + p.feats.join(" ")).indexOf(q) > -1;
-    });
+    }).map(function (p, i) { return { p: p, i: i }; }).sort(function (a, b) {
+      return ((u[b.p.id] || 0) - (u[a.p.id] || 0)) || (a.i - b.i);
+    }).map(function (x) { return x.p; });
     $("plist").innerHTML = list.map(function (p) {
       if (mode === "info") {
         return '<button class="prow" data-prod="' + p.id + '"><div class="pname">' + esc(p.name) + '</div><div class="tags">' + tagsOf(p) + "</div></button>";
@@ -141,9 +159,12 @@
   /* ---------- πληροφορία ---------- */
   function vNote() {
     var p = prodById(S.prod);
-    return BACK + "<h1>Νέα πληροφορία</h1>" +
-      '<div class="prow has"><div class="pname">' + esc(p ? p.name : "") + '</div><div class="tags">' + (p ? tagsOf(p) : "") + "</div></div>" +
-      '<div class="label">Πληροφορία</div><textarea class="field" id="note" placeholder="Γράψε εδώ…" aria-label="Πληροφορία"></textarea>';
+    return BACK + "<h1>Διόρθωση προϊόντος</h1>" + O.edit.html(p) +
+      '<div class="label">Σχόλιο (προαιρετικά)</div><textarea class="field" id="note" placeholder="Γράψε εδώ…" aria-label="Σχόλιο"></textarea>';
+  }
+  function updateSave() {
+    var b = $("saveNote"), p = prodById(S.prod);
+    if (b && p) b.disabled = !(Object.keys(O.edit.changes(p)).length || $("note").value.trim());
   }
 
   /* ---------- ιστορικό ---------- */
@@ -164,6 +185,13 @@
       if (r.kind === "order") {
         out += '<div class="entry"><span class="kind">Παραγγελία · ' + time + "</span><b>" + esc(r.client) + "</b><ul>" +
           r.items.map(function (i) { return Array.isArray(i) ? "<li>" + esc(i[0]) + " × " + i[1] + "</li>" : "<li>" + esc(i.name) + " × " + i.qty + "</li>"; }).join("") + "</ul>" + st + "</div>";
+      } else if (r.kind === "edit") {
+        var lab = {}; O.edit.fields.forEach(function (f) { lab[f.k] = f.label.replace(/ \(.*\)/, ""); });
+        out += '<div class="entry"><span class="kind">Διόρθωση · ' + time + "</span><b>" + esc(r.product) + "</b><ul>" +
+          Object.keys(r.changes || {}).map(function (k) {
+            var c = r.changes[k];
+            return "<li>" + esc(lab[k] || k) + ": " + (esc(O.edit.show(c.from)) || "—") + " → " + (esc(O.edit.show(c.to)) || "—") + "</li>";
+          }).join("") + "</ul>" + (r.text ? "<div>" + esc(r.text) + "</div>" : "") + st + "</div>";
       } else {
         out += '<div class="entry"><span class="kind">Πληροφορία · ' + time + "</span><b>" + esc(r.product) + "</b><div>" + esc(r.text) + "</div>" + st + "</div>";
       }
@@ -183,7 +211,7 @@
       drawProducts();
       if (mode === "order") { setDock('<button class="send" id="send" disabled>Καταχώρηση παραγγελίας</button>'); updateSend(); }
     }
-    if (v === "note") setDock('<button class="send" id="saveNote" disabled>Αποθήκευση πληροφορίας</button>');
+    if (v === "note") setDock('<button class="send" id="saveNote" disabled>Αποθήκευση διόρθωσης</button>');
   }
   function go(v) {
     depth++;
@@ -261,8 +289,8 @@
     }
     else if (t.id === "saveNote") {
       var pr2 = prodById(S.prod);
-      if (!O.store.add({ kind: "info", product: pr2 ? pr2.name : "", productId: S.prod, text: $("note").value.trim() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
-      O.toast("Η πληροφορία καταχωρήθηκε");
+      if (!O.store.add({ kind: "edit", product: pr2 ? pr2.name : "", productId: S.prod, changes: O.edit.changes(pr2), text: $("note").value.trim() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+      O.toast("Η διόρθωση καταχωρήθηκε");
       home(); sync(false);
     }
     else if (a === "sync") { O.toast("Αποστολή…"); sync(true); }
@@ -271,7 +299,7 @@
     var el = e.target;
     if (el.id === "s") drawPick();
     else if (el.id === "pq") { S.q = el.value; drawProducts(); }
-    else if (el.id === "note") { $("saveNote").disabled = !el.value.trim(); }
+    else if (el.id === "note" || el.classList.contains("ef")) updateSave();
     else if (el.dataset && el.dataset.i) {
       var clean = el.value.replace(/\D/g, "").slice(0, 5);
       if (clean !== el.value) el.value = clean;

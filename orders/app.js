@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 8;
+  var VERSION = 9;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -295,7 +295,7 @@
   function delRec(k) {
     var r = O.hist.find(k); confirmKey = "";
     if (!r) { render("history", true); return; }
-    if (!r.id || r.sent !== true) { O.store.remove(r); O.toast("Διαγράφηκε"); render("history", true); return; }
+    if (!r.id || r.sent !== true || r.passed) { O.store.remove(r); O.toast(r.passed ? "Αφαιρέθηκε από το ιστορικό" : "Διαγράφηκε"); render("history", true); return; }
     O.toast("Διαγραφή…");
     O.inbox.remove(r).then(function (res) {
       if (res === "passed") { O.store.update(r.id, { passed: true }); O.toast("Έχει ήδη περαστεί στη βάση, δεν διαγράφεται."); }

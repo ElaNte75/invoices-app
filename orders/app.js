@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 2;
+  var VERSION = 3;
   var view = "home", mode = "order", depth = 0, loginMsg = "";
   var S = fresh();
   var pick = { items: [], kind: "" };

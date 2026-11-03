@@ -201,7 +201,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
       <button id="exportLines" type="button">CSV γραμμών</button>
       <button id="exportStats" type="button">CSV στατιστικών</button>
       <button id="exportCat" type="button">CSV καταλόγου</button>
-      <button id="addDoc" class="primary" type="button">+ Νέο παραστατικό</button>
+      <button id="scanQr" class="primary" type="button">Σάρωση QR</button>
+      <button id="addDoc" type="button">+ Νέο παραστατικό</button>
     </div>
     <div class="clock"><div id="clockDate"></div><div id="clockTime" class="num"></div></div>
     </div>
@@ -366,6 +367,24 @@ select.reason{font-size:.82rem;padding:4px 6px}
   </form>
 </div>
 
+<div class="sheet" id="qrSheet" hidden>
+  <div class="panel">
+    <h2>Σάρωση QR</h2>
+    <p class="hint">Σκάναρε το QR του τιμολογίου ή του δελτίου αποστολής (κάτω δεξιά). Κρατιέται στα «Εισερχόμενα» και η καταχώριση γίνεται στη συνομιλία. Μπορείς να σκανάρεις πολλά στη σειρά.</p>
+    <video id="qrVideo" playsinline muted style="width:100%;border-radius:10px;background:#000;max-height:44vh"></video>
+    <div class="grid">
+      <label>Παράδοση (προαιρετικά)<select id="qrDelivery"><option value="">Δεν ξέρω</option><option>Από εμάς</option><option>Πρακτορείο</option><option>Παραλαβή από πελάτη</option></select></label>
+      <label>Πρακτορείο (αν υπάρχει)<input id="qrAgent" list="agentNames" placeholder="όνομα πρακτορείου"></label>
+      <label class="full">Ή επικόλλησε τον σύνδεσμο του QR<input id="qrPaste" placeholder="https://mydatapi.aade.gr/…"></label>
+    </div>
+    <div class="row"><button type="button" class="small" id="qrAdd">Προσθήκη συνδέσμου</button></div>
+    <div id="qrMsg" class="hint" aria-live="polite"></div>
+    <h3 id="qrInboxTitle">Εισερχόμενα</h3>
+    <div id="qrList" style="display:grid;gap:6px"></div>
+    <div class="row"><div class="right"><button type="button" id="qrClose" class="primary">Κλείσιμο</button></div></div>
+  </div>
+</div>
+
 <div class="sheet" id="custSheet" hidden>
   <form class="panel" id="custForm">
     <h2>Στοιχεία πελάτη</h2>
@@ -398,7 +417,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
 (function(){
   const OWNER = "ElaNte75", REPO = "Invoices", BRANCH = "main";
   const API = localStorage.getItem("gh_api") || "https://api.github.com";
-  const COLS = { customers:"Πελάτης", documents:"Παραστατικό", products:"Προϊόν", agents:"Πρακτορείο", agentRoutes:"Προορισμός πρακτορείου", todos:"Εκκρεμότητα", priceNotes:"Σημείωση τιμής", partners:"Συνεργάτης", partnerDocs:"Δελτίο συνεργάτη" };
+  const COLS = { customers:"Πελάτης", documents:"Παραστατικό", products:"Προϊόν", agents:"Πρακτορείο", agentRoutes:"Προορισμός πρακτορείου", todos:"Εκκρεμότητα", priceNotes:"Σημείωση τιμής", partners:"Συνεργάτης", partnerDocs:"Δελτίο συνεργάτη", qrInbox:"Εισερχόμενο QR" };
   const store = {}, listeners = {};
   let head = null, loading = null;
   Object.keys(COLS).forEach(c => { store[c] = new Map(); listeners[c] = []; });
@@ -564,7 +583,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     return [...map.values()].sort((a,b) => b.qty - a.qty);
   }
 
-  let priceNotes = [], agents = [], routes = [], todos = [], partners = [], partnerDocs = [];
+  let priceNotes = [], agents = [], routes = [], todos = [], partners = [], partnerDocs = [], inbox = [];
   const REASONS = ["","Δεν περάστηκε η έκπτωση","Αύξηση τιμής","Λάθος τιμολόγησης","Αλλαγή συμφωνίας","Ειδική τιμή / προσφορά","Άλλο"];
   function listPriceAt(p, date){
     const h = (Array.isArray(p && p.priceHistory) ? p.priceHistory : []).filter(x => num(x.price) != null && (!date || !x.from || x.from <= date)).sort((a,b)=>String(a.from||"").localeCompare(String(b.from||"")));
@@ -1052,6 +1071,57 @@ select.reason{font-size:.82rem;padding:4px 6px}
     } catch { setStatus("Η αποθήκευση απέτυχε.", true); } finally { $("partSave").disabled = false; }
   });
 
+  // Σάρωση QR: το QR του παραστατικού (σύνδεσμος ΑΑΔΕ/myDATA) κρατιέται στα «Εισερχόμενα»· η καταχώριση των γραμμών γίνεται στη συνομιλία.
+  const QR_PREFIX = "https://mydatapi.aade.gr/myDATA/TimologioQR/QRInfo?q=";
+  let qrStream = null, qrTimer = null, qrBusy = false, qrLast = "", qrLastAt = 0, qrDetector = null, qrCanvas = null;
+  const qrId = async url => { const b = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(url)); return "qr-" + [...new Uint8Array(b)].slice(0, 8).map(x => x.toString(16).padStart(2, "0")).join(""); };
+  const qrMsg = (t, err) => { const m = $("qrMsg"); m.textContent = t || ""; m.style.color = err ? "var(--danger, #b3261e)" : ""; };
+  function renderInbox(){
+    const n = inbox.length;
+    $("scanQr").textContent = n ? `Σάρωση QR (${n})` : "Σάρωση QR";
+    $("qrInboxTitle").textContent = `Εισερχόμενα (${n})`;
+    $("qrList").innerHTML = n ? inbox.slice().sort((a,b) => String(b.scannedAt).localeCompare(String(a.scannedAt))).map(x => `<div class="docitem" style="cursor:default"><div class="top"><span class="name">${esc(new Date(x.scannedAt).toLocaleString("el-GR"))}</span><button type="button" class="small danger" data-qrdel="${esc(x._id)}">Αφαίρεση</button></div><div class="meta">${x.delivery ? `<span>${esc(x.delivery)}</span>` : ""}${x.agent ? `<span>${esc(x.agent)}</span>` : ""}<span class="hint">περιμένει καταχώριση</span></div></div>`).join("") : `<p class="hint">Δεν υπάρχουν εισερχόμενα.</p>`;
+  }
+  async function qrHandle(text){
+    text = String(text || "").trim();
+    if (!db || qrBusy) return;
+    if (!text.startsWith(QR_PREFIX)) { qrMsg("Αυτό το QR δεν είναι παραστατικού της ΑΑΔΕ.", true); return; }
+    const id = await qrId(text);
+    if (inbox.some(x => x._id === id)) { qrMsg("Αυτό το παραστατικό είναι ήδη στα εισερχόμενα.", false); return; }
+    qrBusy = true;
+    try {
+      await db.collection("qrInbox").doc(id).set({url: text, scannedAt: new Date().toISOString(), delivery: $("qrDelivery").value, agent: $("qrAgent").value.trim(), status: "new"});
+      qrMsg("Αποθηκεύτηκε στα εισερχόμενα ✓"); if (navigator.vibrate) navigator.vibrate(80);
+    } catch { qrMsg("Η αποθήκευση απέτυχε. Δοκίμασε ξανά.", true); }
+    finally { qrBusy = false; }
+  }
+  async function qrTick(){
+    const v = $("qrVideo"); if (!qrStream || v.readyState < 2) return;
+    let text = "";
+    try {
+      if (qrDetector) { const r = await qrDetector.detect(v); text = r[0] ? r[0].rawValue : ""; }
+      else if (window.jsQR) { qrCanvas = qrCanvas || document.createElement("canvas"); qrCanvas.width = v.videoWidth; qrCanvas.height = v.videoHeight; const c = qrCanvas.getContext("2d", {willReadFrequently: true}); c.drawImage(v, 0, 0); const d = c.getImageData(0, 0, qrCanvas.width, qrCanvas.height); const r = window.jsQR(d.data, d.width, d.height); text = r ? r.data : ""; }
+    } catch {}
+    if (text && (text !== qrLast || Date.now() - qrLastAt > 4000)) { qrLast = text; qrLastAt = Date.now(); qrHandle(text); }
+  }
+  function qrStop(){ clearInterval(qrTimer); qrTimer = null; if (qrStream) qrStream.getTracks().forEach(t => t.stop()); qrStream = null; $("qrVideo").srcObject = null; }
+  async function qrStart(){
+    qrMsg("");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { qrMsg("Η κάμερα δεν είναι διαθέσιμη εδώ· επικόλλησε τον σύνδεσμο παρακάτω.", true); return; }
+    try {
+      qrStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}, audio: false});
+      const v = $("qrVideo"); v.srcObject = qrStream; await v.play();
+      if ("BarcodeDetector" in window) { try { qrDetector = new BarcodeDetector({formats: ["qr_code"]}); } catch { qrDetector = null; } }
+      if (!qrDetector && !window.jsQR) await new Promise(res => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"; sc.onload = res; sc.onerror = res; document.head.appendChild(sc); });
+      qrTimer = setInterval(qrTick, 350);
+    } catch { qrMsg("Δεν δόθηκε πρόσβαση στην κάμερα· επικόλλησε τον σύνδεσμο παρακάτω.", true); }
+  }
+  $("scanQr").onclick = () => { $("qrSheet").hidden = false; qrStart(); };
+  $("qrClose").onclick = () => { $("qrSheet").hidden = true; };
+  new MutationObserver(() => { if ($("qrSheet").hidden) qrStop(); }).observe($("qrSheet"), {attributes: true, attributeFilter: ["hidden"]});
+  $("qrAdd").onclick = async () => { const t = $("qrPaste").value; if (!t.trim()) return; await qrHandle(t); if ($("qrMsg").textContent.includes("✓")) $("qrPaste").value = ""; };
+  document.addEventListener("click", async e => { const b = e.target.closest && e.target.closest("[data-qrdel]"); if (!b || !db) return; try { await db.collection("qrInbox").doc(b.dataset.qrdel).delete(); } catch { qrMsg("Η αφαίρεση απέτυχε.", true); } });
+
   // Open items: checked automatically from the data, plus notes added by hand.
   const pend = v => /προς επιβεβαίωση|κομμένο/i.test(String(v||""));
   function issuesFor(scope, id){
@@ -1352,7 +1422,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     try { await db.collection("priceNotes").doc(sel.dataset.note).set({reason: sel.value, updatedAt: new Date().toISOString()}); setStatus("Η αιτία αποθηκεύτηκε."); }
     catch { setStatus("Η αποθήκευση απέτυχε.", true); }
   });
-  ["docSheet","custSheet","prodSheet","agSheet","partSheet","listSheet","viewSheet"].forEach(id => $(id).addEventListener("click", e => { if (e.target === $(id)) $(id).hidden = true; }));
+  ["docSheet","custSheet","prodSheet","agSheet","partSheet","qrSheet","listSheet","viewSheet"].forEach(id => $(id).addEventListener("click", e => { if (e.target === $(id)) $(id).hidden = true; }));
   $("tabC").onclick = () => { tab = "C"; selCust = null; render(); };
   document.addEventListener("click", e => { if (e.target.id === "backCust") { selCust = null; render(); } });
   $("tabA").onclick = () => { tab = "A"; render(); };
@@ -1403,6 +1473,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     db.collection("customers").onSnapshot(s => { customers = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
     db.collection("todos").onSnapshot(s => { todos = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
     db.collection("agentRoutes").onSnapshot(s => { routes = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
+    db.collection("qrInbox").onSnapshot(s => { inbox = s.docs.map(d => Object.assign({_id:d.id}, d.data())); renderInbox(); }, fail);
     db.collection("partners").onSnapshot(s => { partners = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
     db.collection("partnerDocs").onSnapshot(s => { partnerDocs = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);
     db.collection("agents").onSnapshot(s => { agents = s.docs.map(d => Object.assign({_id:d.id}, d.data())); done(); }, fail);

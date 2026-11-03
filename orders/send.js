@@ -22,6 +22,8 @@
       p.product = { id: r.productId || "", name: r.product };
       p.changes = r.changes;
       p.note = r.text || "";
+    } else if (r.kind === "qr") {
+      p.url = r.url;
     } else {
       p.product = { id: r.productId || "", name: r.product };
       p.text = r.text;
@@ -29,7 +31,7 @@
     return p;
   }
   function put(r) {
-    var what = r.kind === "order" ? "παραγγελία " + r.client : r.kind === "client" ? "νέος πελάτης " + r.client.shortName : r.kind === "edit" ? "διόρθωση καταλόγου για " + r.product : "πληροφορία για " + r.product;
+    var what = r.kind === "order" ? "παραγγελία " + r.client : r.kind === "client" ? "νέος πελάτης " + r.client.shortName : r.kind === "edit" ? "επεξεργασία καταλόγου για " + r.product : r.kind === "qr" ? "QR τιμολογίου" : "πληροφορία για " + r.product;
     var body = {
       message: "Από την εφαρμογή παραγγελιών: " + what,
       content: b64(JSON.stringify(payload(r), null, 2) + "\n"),

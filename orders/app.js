@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 10;
+  var VERSION = 11;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -333,6 +333,11 @@
     return true;
   }
 
+  /* Φόρμες πελάτη: δύο ίσα κουμπιά, Ακύρωση και Καταχώρηση */
+  function formDock(saveId) {
+    return '<div class="dock2 eq"><button class="more" id="cancelForm">Ακύρωση</button><button class="send" id="' + saveId + '" disabled>Καταχώρηση</button></div>';
+  }
+
   /* ---------- εμφάνιση ---------- */
   function render(v, keepScroll) {
     view = v;
@@ -359,8 +364,8 @@
       setDock('<div class="docknote" id="dnote"></div><div class="dock2"><button class="send" id="send" disabled>Αποθήκευση αλλαγών</button></div>');
       updateSend();
     }
-    if (v === "clientform") { setDock('<button class="send" id="saveCF" disabled>Αποθήκευση</button>'); updateCF(); }
-    if (v === "newclient") setDock('<button class="send" id="saveClient" disabled>Αποθήκευση πελάτη</button>');
+    if (v === "clientform") { setDock(formDock("saveCF")); updateCF(); }
+    if (v === "newclient") setDock(formDock("saveClient"));
     if (v === "note") { setDock('<button class="send" id="saveNote" disabled>Αποθήκευση επεξεργασίας</button>'); updateSave(); }
     if (v === "scan") {
       lastBad = "";
@@ -444,7 +449,7 @@
     else if (t.dataset.p) { var p = t.dataset.p; setQty(p, (S.qty[p] || 0) + 1); $("q" + p).value = S.qty[p] || 0; }
     else if (t.dataset.m) { var m = t.dataset.m; setQty(m, (S.qty[m] || 0) - 1); $("q" + m).value = S.qty[m] || 0; }
     else if (t.dataset.prod) { S.prod = t.dataset.prod; go("note"); }
-    else if (t.id === "more") history.back();
+    else if (t.id === "more" || t.id === "cancelForm") history.back();
     else if (t.id === "send" && S.editId) saveOrderEdit();
     else if (t.id === "saveCF") saveCF();
     else if (t.id === "send") {

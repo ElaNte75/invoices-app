@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 5;
+  var VERSION = 6;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var S = fresh();
   var pick = { items: [], kind: "" };
@@ -14,7 +14,15 @@
   function norm(s) {
     return String(s).toLowerCase().replace(/ς/g, "σ").normalize("NFD").replace(/[̀-ͯ]/g, "");
   }
-  function clientById(id) { return O.data.clients.filter(function (c) { return c.id === id; })[0]; }
+  /* Πελάτες που καταχωρήθηκαν από το κινητό και δεν υπάρχουν ακόμα στη βάση (φεύγουν όταν μπουν με το ίδιο όνομα ή ΑΦΜ) */
+  function newClients() {
+    var known = O.data.clients;
+    return O.store.all().filter(function (r) { return r.kind === "client"; }).filter(function (r) {
+      var n = norm(r.client.shortName), a = r.client.afm;
+      return !known.some(function (c) { return norm(c.name) === n || (a && c.afm === a); });
+    }).map(function (r) { return { id: "new-" + r.id, name: r.client.shortName, city: r.client.city || "", isNew: true }; });
+  }
+  function clientById(id) { return newClients().concat(O.data.clients).filter(function (c) { return c.id === id; })[0]; }
   function prodById(id) { return O.data.products.filter(function (p) { return p.id === id; })[0]; }
   function setDock(html) {
     dock.innerHTML = html || "";
@@ -66,7 +74,8 @@
   /* ---------- λίστες επιλογής (πελάτης, κατηγορία) ---------- */
   function vPick(title, placeholder, items, kind) {
     pick = { items: items, kind: kind };
-    return BACK + "<h1>" + title + '</h1><input class="search" id="s" type="search" placeholder="' + placeholder + '" aria-label="' + placeholder + '" autocomplete="off"><div class="list" id="list"></div>';
+    var top = kind === "client" ? '<div class="topbar">' + BACK + '<button class="back" data-act="new-client">+ Νέος πελάτης</button></div>' : BACK;
+    return top + "<h1>" + title + '</h1><input class="search" id="s" type="search" placeholder="' + placeholder + '" aria-label="' + placeholder + '" autocomplete="off"><div class="list" id="list"></div>';
   }
   function drawPick() {
     var q = norm($("s").value.trim());
@@ -88,7 +97,13 @@
   function vClient() {
     var u = usage().clients;
     var list = O.data.clients.slice().sort(function (a, b) { return (u[b.id] || 0) - (u[a.id] || 0); });
-    return vPick("Πελάτης", "Γράψε για αναζήτηση", list.map(function (c) { return { k: c.id, label: c.name, sub: c.city }; }), "client");
+    list = newClients().concat(list);
+    return vPick("Πελάτης", "Γράψε για αναζήτηση", list.map(function (c) {
+      return { k: c.id, label: c.name, sub: c.isNew ? "Νέος · περιμένει καταχώρηση" : c.city };
+    }), "client");
+  }
+  function vNewClient() {
+    return BACK + "<h1>Νέος πελάτης</h1><p class=\"sub\">Γράψε όσα ξέρεις. Ό,τι λείπει μένει κενό και συμπληρώνεται αργότερα.</p>" + O.newClient.html();
   }
   function vCat() {
     var counts = {};
@@ -185,6 +200,11 @@
       if (r.kind === "order") {
         out += '<div class="entry"><span class="kind">Παραγγελία · ' + time + "</span><b>" + esc(r.client) + "</b><ul>" +
           r.items.map(function (i) { return Array.isArray(i) ? "<li>" + esc(i[0]) + " × " + i[1] + "</li>" : "<li>" + esc(i.name) + " × " + i.qty + "</li>"; }).join("") + "</ul>" + st + "</div>";
+      } else if (r.kind === "client") {
+        var cf = r.client || {};
+        out += '<div class="entry"><span class="kind">Νέος πελάτης · ' + time + "</span><b>" + esc(cf.shortName || "") + "</b><ul>" +
+          [["name", "Επωνυμία"], ["afm", "ΑΦΜ"], ["city", "Πόλη"], ["address", "Διεύθυνση"], ["phone", "Τηλέφωνο"], ["doy", "ΔΟΥ"], ["profession", "Επάγγελμα"]].filter(function (x) { return cf[x[0]]; })
+            .map(function (x) { return "<li>" + x[1] + ": " + esc(cf[x[0]]) + "</li>"; }).join("") + "</ul>" + (r.text ? "<div>" + esc(r.text) + "</div>" : "") + st + "</div>";
       } else if (r.kind === "edit") {
         var lab = {}; O.edit.fields.forEach(function (f) { lab[f.k] = f.label.replace(/ \(.*\)/, ""); });
         out += '<div class="entry"><span class="kind">Διόρθωση · ' + time + "</span><b>" + esc(r.product) + "</b><ul>" +
@@ -203,7 +223,7 @@
   function render(v) {
     view = v;
     setDock("");
-    var html = { home: vHome, login: vLogin, loading: vLoading, client: vClient, cat: vCat, products: vProducts, note: vNote, history: vHistory }[v]();
+    var html = { home: vHome, login: vLogin, loading: vLoading, client: vClient, newclient: vNewClient, cat: vCat, products: vProducts, note: vNote, history: vHistory }[v]();
     app.innerHTML = html;
     window.scrollTo(0, 0);
     if (v === "client" || v === "cat") drawPick();
@@ -211,6 +231,7 @@
       drawProducts();
       if (mode === "order") { setDock('<button class="send" id="send" disabled>Καταχώρηση παραγγελίας</button>'); updateSend(); }
     }
+    if (v === "newclient") setDock('<button class="send" id="saveClient" disabled>Αποθήκευση πελάτη</button>');
     if (v === "note") setDock('<button class="send" id="saveNote" disabled>Αποθήκευση διόρθωσης</button>');
   }
   function go(v) {
@@ -294,12 +315,24 @@
       home(); sync(false);
     }
     else if (a === "sync") { O.toast("Αποστολή…"); sync(true); }
+    else if (a === "new-client") go("newclient");
+    else if (t.id === "saveClient") {
+      var cl = O.newClient.values();
+      if (!O.store.add({ kind: "client", client: cl, text: O.newClient.note() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+      var added = O.store.all().filter(function (r) { return r.kind === "client"; })[0];
+      S.client = "new-" + added.id;
+      O.toast("Ο πελάτης αποθηκεύτηκε: " + cl.shortName);
+      if (S.edit) { S.edit = false; history.go(-2); }
+      else { history.replaceState({ v: "cat", d: depth }, ""); render("cat"); }
+      sync(false);
+    }
   });
   document.addEventListener("input", function (e) {
     var el = e.target;
     if (el.id === "s") drawPick();
     else if (el.id === "pq") { S.q = el.value; drawProducts(); }
     else if (el.id === "note" || el.classList.contains("ef")) updateSave();
+    else if (el.classList.contains("cf")) $("saveClient").disabled = !O.newClient.ok();
     else if (el.dataset && el.dataset.i) {
       var clean = el.value.replace(/\D/g, "").slice(0, 5);
       if (clean !== el.value) el.value = clean;

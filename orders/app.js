@@ -2,8 +2,8 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 3;
-  var view = "home", mode = "order", depth = 0, loginMsg = "";
+  var VERSION = 4;
+  var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var S = fresh();
   var pick = { items: [], kind: "" };
 
@@ -40,7 +40,10 @@
   function vHome() {
     var d = O.data, n = O.store.all().length;
     var when = d.updated ? new Date(d.updated).toLocaleString("el-GR", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-    return '<h1>Παραγγελίες</h1><div class="stack">' +
+    var left = O.store.pending().length;
+    var pend = left ? '<div class="msg">' + left + (left === 1 ? " καταχώρηση περιμένει" : " καταχωρήσεις περιμένουν") + " αποστολή." + (syncMsg ? " " + esc(syncMsg) : "") +
+      '</div><button class="small" data-act="sync">Αποστολή τώρα</button>' : "";
+    return '<h1>Παραγγελίες</h1>' + pend + '<div class="stack">' +
       '<button class="big primary" data-act="new-order">Νέα παραγγελία</button>' +
       '<button class="big" data-act="new-info">Νέα πληροφορία</button>' +
       '<button class="big" data-act="history">Ιστορικό<small>' + n + " εγγραφές</small></button></div>" +
@@ -157,11 +160,12 @@
       var day = dayLabel(r.t);
       if (day !== last) { out += '<div class="day">' + esc(day) + "</div>"; last = day; }
       var time = new Date(r.t).toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" });
+      var st = r.sent === false ? '<div class="sub">Περιμένει αποστολή</div>' : r.sent ? '<div class="sub">Στάλθηκε</div>' : "";
       if (r.kind === "order") {
         out += '<div class="entry"><span class="kind">Παραγγελία · ' + time + "</span><b>" + esc(r.client) + "</b><ul>" +
-          r.items.map(function (i) { return "<li>" + esc(i[0]) + " × " + i[1] + "</li>"; }).join("") + "</ul></div>";
+          r.items.map(function (i) { return Array.isArray(i) ? "<li>" + esc(i[0]) + " × " + i[1] + "</li>" : "<li>" + esc(i.name) + " × " + i.qty + "</li>"; }).join("") + "</ul>" + st + "</div>";
       } else {
-        out += '<div class="entry"><span class="kind">Πληροφορία · ' + time + "</span><b>" + esc(r.product) + "</b><div>" + esc(r.text) + "</div></div>";
+        out += '<div class="entry"><span class="kind">Πληροφορία · ' + time + "</span><b>" + esc(r.product) + "</b><div>" + esc(r.text) + "</div>" + st + "</div>";
       }
     });
     return BACK + "<h1>Ιστορικό</h1>" + (out || '<p class="empty">Δεν υπάρχουν εγγραφές ακόμα.</p>');
@@ -211,6 +215,21 @@
     });
   }
 
+  /* ---------- αποστολή στο GitHub ---------- */
+  function sync(manual) {
+    return O.sync().then(function (r) {
+      syncMsg = "";
+      if (r.sent) O.toast(r.sent === 1 ? "Στάλθηκε στο GitHub" : "Στάλθηκαν " + r.sent + " καταχωρήσεις");
+    }, function (err) {
+      var code = err && err.code;
+      if (code === "noperm") syncMsg = "Το κλειδί δεν έχει δικαίωμα εγγραφής. Άλλαξε τα δικαιώματά του στο GitHub (Contents: Read and write).";
+      else if (code === "auth") syncMsg = "Το κλειδί δεν έγινε δεκτό. Βάλε νέο από «Αλλαγή κλειδιού».";
+      else syncMsg = "";
+      if (manual || code === "noperm" || code === "auth") O.toast(syncMsg || "Χωρίς σύνδεση. Θα σταλούν αργότερα.");
+    }).then(function () { if (view === "home") render("home"); });
+  }
+  window.addEventListener("online", function () { sync(false); });
+
   /* ---------- ενέργειες ---------- */
   document.addEventListener("click", function (e) {
     var t = e.target.closest("button"); if (!t) return;
@@ -234,18 +253,19 @@
     else if (t.dataset.m) { var m = t.dataset.m; setQty(m, (S.qty[m] || 0) - 1); $("q" + m).value = S.qty[m] || 0; }
     else if (t.dataset.prod) { S.prod = t.dataset.prod; go("note"); }
     else if (t.id === "send") {
-      var items = Object.keys(S.qty).map(function (id) { var pr = prodById(id); return [pr ? pr.name : id, S.qty[id]]; });
+      var items = Object.keys(S.qty).map(function (id) { var pr = prodById(id); return { id: id, name: pr ? pr.name : id, qty: S.qty[id] }; });
       var c = clientById(S.client);
-      if (!O.store.add({ kind: "order", client: c ? c.name : "", items: items })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+      if (!O.store.add({ kind: "order", client: c ? c.name : "", clientId: S.client, items: items })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
       O.toast("Καταχωρήθηκε: " + (c ? c.name : ""));
-      home();
+      home(); sync(false);
     }
     else if (t.id === "saveNote") {
       var pr2 = prodById(S.prod);
-      if (!O.store.add({ kind: "info", product: pr2 ? pr2.name : "", text: $("note").value.trim() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
-      O.toast("Η πληροφορία αποθηκεύτηκε");
-      home();
+      if (!O.store.add({ kind: "info", product: pr2 ? pr2.name : "", productId: S.prod, text: $("note").value.trim() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+      O.toast("Η πληροφορία καταχωρήθηκε");
+      home(); sync(false);
     }
+    else if (a === "sync") { O.toast("Αποστολή…"); sync(true); }
   });
   document.addEventListener("input", function (e) {
     var el = e.target;
@@ -271,6 +291,6 @@
   /* ---------- εκκίνηση ---------- */
   history.replaceState({ v: "home", d: 0 }, "");
   if (!O.token.get()) render("login");
-  else if (O.loadCache()) { render("home"); refresh(true); }
+  else if (O.loadCache()) { render("home"); refresh(true); sync(false); }
   else refresh(false);
 })(window.O = window.O || {});

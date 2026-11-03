@@ -24,6 +24,9 @@
       list.push(rec);
       return write(list);
     },
+    remove: function (rec) {
+      return write(read().filter(function (r) { return !(r.t === rec.t && r.id === rec.id); }));
+    },
     update: function (id, patch) {
       var list = read();
       list.forEach(function (r) { if (r.id === id) Object.keys(patch).forEach(function (k) { r[k] = patch[k]; }); });

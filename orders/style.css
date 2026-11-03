@@ -66,8 +66,9 @@ textarea.field { padding: 12px 14px; min-height: 140px; resize: vertical; }
 .crumb { min-height: 56px; text-align: left; border: 2px solid var(--accent); background: var(--soft); border-radius: 10px; padding: 6px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; font-family: var(--font-display); font-size: 20px; font-weight: 600; }
 .crumb small { font-family: var(--font-body); font-size: 13px; font-weight: 400; color: var(--muted); display: block; }
 .crumb::after { content: "αλλαγή"; font-family: var(--font-body); font-size: 14px; font-weight: 400; color: var(--muted); flex: none; }
-.seg { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.seg button { min-height: 56px; padding: 0 18px; border: 2px solid var(--line); background: var(--surface); border-radius: 10px; font-family: var(--font-display); font-size: 20px; font-weight: 600; }
+.seg { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
+.seg button:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.seg button { min-height: 60px; padding: 4px 12px; text-align: center; border: 2px solid var(--line); background: var(--surface); border-radius: 10px; font-family: var(--font-display); font-size: 20px; font-weight: 600; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 
 /* προϊόντα */

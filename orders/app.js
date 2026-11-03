@@ -2,12 +2,14 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 7;
+  var VERSION = 8;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
+  var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
   var pick = { items: [], kind: "" };
 
-  function fresh() { return { client: null, cat: null, qty: {}, mat: "", q: "", prod: null, edit: false }; }
+  /* editId: καταχώρηση του ιστορικού που επεξεργαζόμαστε· names: ονόματα προϊόντων παραγγελίας που επεξεργαζόμαστε */
+  function fresh() { return { client: null, clientName: "", cat: null, qty: {}, names: {}, mat: "", q: "", prod: null, edit: false, editId: "" }; }
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
   }
@@ -43,10 +45,12 @@
     return t.map(function (x) { return '<span class="tag">' + esc(x) + "</span>"; }).join("");
   }
   var BACK = '<button class="back" data-act="back">‹ Πίσω</button>';
+  O.ui = { esc: esc, back: BACK };
+  function histBtn(act) { return '<div class="topbar">' + BACK + '<button class="back" data-act="' + act + '">Ιστορικό</button></div>'; }
 
   /* ---------- αρχική ---------- */
   function vHome() {
-    var d = O.data, n = O.store.all().length;
+    var d = O.data, n = O.hist.count("orders");
     var when = d.updated ? new Date(d.updated).toLocaleString("el-GR", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
     var left = O.store.pending().length;
     var pend = left ? '<div class="msg">' + left + (left === 1 ? " καταχώρηση περιμένει" : " καταχωρήσεις περιμένουν") + " αποστολή." + (syncMsg ? " " + esc(syncMsg) : "") +
@@ -54,8 +58,9 @@
     return '<h1>Παραγγελίες</h1>' + pend + '<div class="stack">' +
       '<button class="big primary" data-act="new-order">Νέα παραγγελία</button>' +
       '<button class="big" data-act="scan">Σκανάρισμα QR τιμολογίου<small>καταχώρηση τιμολογίου με την κάμερα</small></button>' +
+      '<button class="big" data-act="clients">Επεξεργασία πελατών<small>στοιχεία πελάτη, νέος πελάτης</small></button>' +
       '<button class="big" data-act="new-info">Επεξεργασία καταλόγου<small>πάχος, υλικό, διαστάσεις, περιγραφή</small></button>' +
-      '<button class="big" data-act="history">Ιστορικό<small>' + n + " εγγραφές</small></button></div>" +
+      '<button class="big" data-act="history">Ιστορικό παραγγελιών<small>' + n + " εγγραφές</small></button></div>" +
       '<p class="status">' + d.clients.length + " πελάτες · " + d.products.length + " προϊόντα · ενημερώθηκαν " + when + "</p>" +
       '<div class="row2"><button class="small" data-act="refresh">Ανανέωση δεδομένων</button>' +
       '<button class="small" data-act="token">Αλλαγή κλειδιού</button></div>' +
@@ -75,8 +80,11 @@
   /* ---------- λίστες επιλογής (πελάτης, κατηγορία) ---------- */
   function vPick(title, placeholder, items, kind) {
     pick = { items: items, kind: kind };
-    var top = kind === "client" ? '<div class="topbar">' + BACK + '<button class="back" data-act="new-client">+ Νέος πελάτης</button></div>' : BACK;
-    return top + "<h1>" + title + '</h1><input class="search" id="s" type="search" placeholder="' + placeholder + '" aria-label="' + placeholder + '" autocomplete="off"><div class="list" id="list"></div>';
+    var top = BACK, add = "";
+    if (kind === "client") top = '<div class="topbar">' + BACK + '<button class="back" data-act="new-client">+ Νέος πελάτης</button></div>';
+    else if (kind === "cl") { top = histBtn("hist-clients"); add = '<button class="small add" data-act="new-client">+ Νέος πελάτης</button>'; }
+    else if (kind === "cat" && mode === "info") top = histBtn("hist-catalog");
+    return top + "<h1>" + title + "</h1>" + add + '<input class="search" id="s" type="search" placeholder="' + placeholder + '" aria-label="' + placeholder + '" autocomplete="off"><div class="list" id="list"></div>';
   }
   function drawPick() {
     var q = norm($("s").value.trim());
@@ -95,13 +103,61 @@
     });
     return u;
   }
-  function vClient() {
+  function clientItems() {
     var u = usage().clients;
     var list = O.data.clients.slice().sort(function (a, b) { return (u[b.id] || 0) - (u[a.id] || 0); });
-    list = newClients().concat(list);
-    return vPick("Πελάτης", "Γράψε για αναζήτηση", list.map(function (c) {
+    return newClients().concat(list).map(function (c) {
       return { k: c.id, label: c.name, sub: c.isNew ? "Νέος · περιμένει καταχώρηση" : c.city };
-    }), "client");
+    });
+  }
+  function vClient() { return vPick("Πελάτης", "Γράψε για αναζήτηση", clientItems(), "client"); }
+  function vClients() { return vPick("Επεξεργασία πελατών", "Γράψε για αναζήτηση", clientItems(), "cl"); }
+
+  /* φόρμα πελάτη για επεξεργασία: cf = { kind: "client" | "clientEdit", rec, c, base, vals, note } */
+  function baseOf(c) {
+    return { shortName: c.short, name: c.full, afm: c.afm, city: c.city, address: c.address, phone: c.phone, doy: c.doy, profession: c.prof };
+  }
+  function openClientForm(id) {
+    var r, c;
+    if (id.indexOf("new-") === 0) {
+      r = O.store.all().filter(function (x) { return "new-" + x.id === id; })[0];
+      if (!r) return;
+      cf = { kind: "client", rec: r, vals: r.client, note: r.text || "" };
+    } else {
+      c = clientById(id);
+      if (!c) return;
+      cf = { kind: "clientEdit", c: c, base: baseOf(c), vals: baseOf(c), note: "" };
+    }
+    go("clientform");
+  }
+  function editClientRec(r) {
+    if (r.kind === "client") cf = { kind: "client", rec: r, vals: r.client, note: r.text || "" };
+    else {
+      var c = clientById(r.clientId);
+      if (!c) { O.toast("Ο πελάτης δεν βρέθηκε στη βάση."); return; }
+      var vals = baseOf(c);
+      Object.keys(r.changes || {}).forEach(function (k) { vals[k] = r.changes[k].to || ""; });
+      cf = { kind: "clientEdit", rec: r, c: c, base: baseOf(c), vals: vals, note: r.text || "" };
+    }
+    go("clientform");
+  }
+  function vClientForm() {
+    return BACK + "<h1>" + (cf.kind === "client" ? "Νέος πελάτης" : "Επεξεργασία πελάτη") + "</h1>" +
+      (cf.c ? '<p class="sub">' + esc(cf.c.name) + "</p>" : "") + O.newClient.html(cf.vals, cf.note, cf.kind === "clientEdit");
+  }
+  function updateCF() {
+    var b = $("saveCF"); if (!b) return;
+    b.disabled = cf.kind === "client" ? !O.newClient.ok() : !(Object.keys(O.newClient.changes(cf.base)).length || O.newClient.note());
+  }
+  function saveCF() {
+    var note = O.newClient.note(), rec, ok;
+    if (cf.kind === "client") rec = { client: O.newClient.values(), text: note };
+    else rec = { kind: "clientEdit", clientId: cf.c.id, client: cf.c.name, changes: O.newClient.changes(cf.base), text: note };
+    ok = cf.rec ? O.store.update(cf.rec.id, Object.assign(rec, { sent: false, edited: new Date().toISOString() })) : O.store.add(Object.assign({ kind: "client" }, rec));
+    if (!ok) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+    O.toast(cf.rec ? "Η επεξεργασία αποθηκεύτηκε" : "Η επεξεργασία καταχωρήθηκε");
+    if (cf.rec) history.back(); else home();
+    sync(false);
   }
   function vNewClient() {
     return BACK + "<h1>Νέος πελάτης</h1><p class=\"sub\">Γράψε όσα ξέρεις. Ό,τι λείπει μένει κενό και συμπληρώνεται αργότερα.</p>" + O.newClient.html();
@@ -120,15 +176,20 @@
   }
 
   /* ---------- προϊόντα ---------- */
+  /* Στην επεξεργασία παραγγελίας ο πελάτης δεν αλλάζει */
+  function clientCrumb() {
+    var c = clientById(S.client), name = esc(S.clientName || (c ? c.name : ""));
+    if (S.editId) return '<div class="crumb ro"><span><small>Πελάτης</small>' + name + "</span></div>";
+    return '<button class="crumb" data-act="edit-client"><span><small>Πελάτης</small>' + name + "</span></button>";
+  }
+  function itemName(id) { var p = prodById(id); return S.names[id] || (p ? p.name : id); }
+  function orderItems() { return Object.keys(S.qty).map(function (id) { return { id: id, name: itemName(id), qty: S.qty[id] }; }); }
   function catProducts() { return O.data.products.filter(function (p) { return p.cat === S.cat; }); }
   function vProducts() {
     var all = catProducts(), mats = [];
     all.forEach(function (p) { if (p.mat && mats.indexOf(p.mat) < 0) mats.push(p.mat); });
     var crumbs = "";
-    if (mode === "order") {
-      var c = clientById(S.client);
-      crumbs += '<button class="crumb" data-act="edit-client"><span><small>Πελάτης</small>' + esc(c ? c.name : "") + "</span></button>";
-    }
+    if (mode === "order") crumbs += clientCrumb();
     crumbs += '<button class="crumb" data-act="edit-cat"><span><small>Κατηγορία</small>' + esc(S.cat) + "</span></button>";
     var seg = "";
     if (mats.length > 1) {
@@ -161,9 +222,9 @@
   function total() { return Object.keys(S.qty).reduce(function (s, k) { return s + S.qty[k]; }, 0); }
   function updateSend() {
     var b = $("send"); if (!b) return;
-    var n = total(), k = Object.keys(S.qty).length;
+    var n = total(), k = Object.keys(S.qty).filter(function (id) { return S.qty[id] > 0; }).length;
     b.disabled = !n;
-    $("more").disabled = !n;
+    if ($("more")) $("more").disabled = !n;
     $("dnote").textContent = n ? k + (k === 1 ? " προϊόν" : " προϊόντα") + " στην παραγγελία · " + n + " τεμ." : "Δεν έχεις βάλει ακόμα ποσότητα";
   }
   function setQty(id, n) {
@@ -175,9 +236,44 @@
 
   /* ---------- πληροφορία ---------- */
   function vNote() {
-    var p = prodById(S.prod);
-    return BACK + "<h1>Επεξεργασία προϊόντος</h1>" + O.edit.html(p) +
-      '<div class="label">Σχόλιο (προαιρετικά)</div><textarea class="field" id="note" placeholder="Γράψε εδώ…" aria-label="Σχόλιο"></textarea>';
+    var p = prodById(S.prod), shown = p, rec = S.editId && O.hist.find(S.editId);
+    if (rec) {
+      shown = Object.assign({}, p);
+      O.edit.fields.forEach(function (f) {
+        var c = (rec.changes || {})[f.k];
+        if (c) shown[f.s] = c.to == null ? (f.type === "list" ? [] : "") : c.to;
+      });
+    }
+    return BACK + "<h1>Επεξεργασία προϊόντος</h1>" + O.edit.html(shown) +
+      '<div class="label">Σχόλιο (προαιρετικά)</div><textarea class="field" id="note" placeholder="Γράψε εδώ…" aria-label="Σχόλιο">' + esc(rec ? rec.text || "" : "") + "</textarea>";
+  }
+  function editCatRec(r) {
+    if (!prodById(r.productId)) { O.toast("Το προϊόν δεν βρέθηκε στον κατάλογο."); return; }
+    S = fresh(); S.prod = r.productId; S.editId = r.id; mode = "info";
+    go("note");
+  }
+
+  /* ---------- επεξεργασία παραγγελίας (πελάτης σταθερός, αλλάζουν τα προϊόντα) ---------- */
+  function editOrderRec(r) {
+    S = fresh(); mode = "order";
+    S.client = r.clientId || ""; S.clientName = r.client; S.editId = r.id;
+    r.items.forEach(function (i, n) { var id = i.id || "x" + n; S.qty[id] = i.qty; S.names[id] = i.name; });
+    go("orderedit");
+  }
+  function vOrderEdit() {
+    var rows = Object.keys(S.qty).map(function (id) {
+      return '<div class="prow has" id="r' + id + '"><div class="pname">' + esc(itemName(id)) + "</div>" +
+        '<div class="step"><button data-m="' + id + '" aria-label="Λιγότερο">−</button>' +
+        '<input id="q' + id + '" data-i="' + id + '" type="text" inputmode="numeric" pattern="[0-9]*" value="' + S.qty[id] + '" aria-label="Ποσότητα">' +
+        '<button class="plus" data-p="' + id + '" aria-label="Περισσότερο">+</button><span class="unit">τεμ.</span></div></div>';
+    }).join("");
+    return BACK + "<h1>Επεξεργασία παραγγελίας</h1><div class=\"crumbs\">" + clientCrumb() + '</div><p class="sub">Βάλε 0 για να βγει ένα προϊόν.</p><div class="list">' + rows +
+      '</div><button class="big add2" data-act="edit-add">+ Προσθήκη προϊόντος</button>';
+  }
+  function saveOrderEdit() {
+    if (!O.store.update(S.editId, { items: orderItems(), sent: false, edited: new Date().toISOString() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+    O.toast("Η παραγγελία ενημερώθηκε");
+    home(); sync(false);
   }
   function updateSave() {
     var b = $("saveNote"), p = prodById(S.prod);
@@ -185,42 +281,29 @@
   }
 
   /* ---------- ιστορικό ---------- */
-  function dayLabel(iso) {
-    var d = new Date(iso), t = new Date(), y = new Date();
-    y.setDate(t.getDate() - 1);
-    if (d.toDateString() === t.toDateString()) return "Σήμερα";
-    if (d.toDateString() === y.toDateString()) return "Χθες";
-    return d.toLocaleDateString("el-GR", { weekday: "long", day: "numeric", month: "long" });
+  function openHist(set) {
+    hset = set; confirmKey = "";
+    go("history");
+    O.inbox.refresh().then(function (changed) { if (changed && view === "history") render("history", true); });
   }
-  function vHistory() {
-    var list = O.store.all(), out = "", last = "";
-    list.forEach(function (r) {
-      var day = dayLabel(r.t);
-      if (day !== last) { out += '<div class="day">' + esc(day) + "</div>"; last = day; }
-      var time = new Date(r.t).toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" });
-      var st = r.sent === false ? '<div class="sub">Περιμένει αποστολή</div>' : r.sent ? '<div class="sub">Στάλθηκε</div>' : "";
-      if (r.kind === "order") {
-        out += '<div class="entry"><span class="kind">Παραγγελία · ' + time + "</span><b>" + esc(r.client) + "</b><ul>" +
-          r.items.map(function (i) { return Array.isArray(i) ? "<li>" + esc(i[0]) + " × " + i[1] + "</li>" : "<li>" + esc(i.name) + " × " + i.qty + "</li>"; }).join("") + "</ul>" + st + "</div>";
-      } else if (r.kind === "client") {
-        var cf = r.client || {};
-        out += '<div class="entry"><span class="kind">Νέος πελάτης · ' + time + "</span><b>" + esc(cf.shortName || "") + "</b><ul>" +
-          [["name", "Επωνυμία"], ["afm", "ΑΦΜ"], ["city", "Πόλη"], ["address", "Διεύθυνση"], ["phone", "Τηλέφωνο"], ["doy", "ΔΟΥ"], ["profession", "Επάγγελμα"]].filter(function (x) { return cf[x[0]]; })
-            .map(function (x) { return "<li>" + x[1] + ": " + esc(cf[x[0]]) + "</li>"; }).join("") + "</ul>" + (r.text ? "<div>" + esc(r.text) + "</div>" : "") + st + "</div>";
-      } else if (r.kind === "qr") {
-        out += '<div class="entry"><span class="kind">Τιμολόγιο QR · ' + time + "</span><b>Σκανάρισμα τιμολογίου</b><div class=\"sub\">Περιμένει καταχώριση από τον Claude</div>" + st + "</div>";
-      } else if (r.kind === "edit") {
-        var lab = {}; O.edit.fields.forEach(function (f) { lab[f.k] = f.label.replace(/ \(.*\)/, ""); });
-        out += '<div class="entry"><span class="kind">Επεξεργασία · ' + time + "</span><b>" + esc(r.product) + "</b><ul>" +
-          Object.keys(r.changes || {}).map(function (k) {
-            var c = r.changes[k];
-            return "<li>" + esc(lab[k] || k) + ": " + (esc(O.edit.show(c.from)) || "—") + " → " + (esc(O.edit.show(c.to)) || "—") + "</li>";
-          }).join("") + "</ul>" + (r.text ? "<div>" + esc(r.text) + "</div>" : "") + st + "</div>";
-      } else {
-        out += '<div class="entry"><span class="kind">Πληροφορία · ' + time + "</span><b>" + esc(r.product) + "</b><div>" + esc(r.text) + "</div>" + st + "</div>";
-      }
-    });
-    return BACK + "<h1>Ιστορικό</h1>" + (out || '<p class="empty">Δεν υπάρχουν εγγραφές ακόμα.</p>');
+  function editRec(k) {
+    var r = O.hist.find(k); if (!r || r.passed) return;
+    if (r.kind === "order") editOrderRec(r);
+    else if (r.kind === "edit") editCatRec(r);
+    else if (r.kind === "client" || r.kind === "clientEdit") editClientRec(r);
+  }
+  function delRec(k) {
+    var r = O.hist.find(k); confirmKey = "";
+    if (!r) { render("history", true); return; }
+    if (!r.id || r.sent !== true) { O.store.remove(r); O.toast("Διαγράφηκε"); render("history", true); return; }
+    O.toast("Διαγραφή…");
+    O.inbox.remove(r).then(function (res) {
+      if (res === "passed") { O.store.update(r.id, { passed: true }); O.toast("Έχει ήδη περαστεί στη βάση, δεν διαγράφεται."); }
+      else { O.store.remove(r); O.toast("Διαγράφηκε"); }
+    }, function (err) {
+      var code = err && err.code;
+      O.toast(code === "net" ? "Χρειάζεται σύνδεση για διαγραφή." : code === "noperm" ? "Το κλειδί δεν έχει δικαίωμα εγγραφής." : "Δεν έγινε η διαγραφή.");
+    }).then(function () { if (view === "history") render("history", true); });
   }
 
   /* ---------- σκανάρισμα QR ---------- */
@@ -251,24 +334,34 @@
   }
 
   /* ---------- εμφάνιση ---------- */
-  function render(v) {
+  function render(v, keepScroll) {
     view = v;
     O.scan.stop();
     setDock("");
-    var html = { home: vHome, login: vLogin, loading: vLoading, client: vClient, newclient: vNewClient, cat: vCat, products: vProducts, note: vNote, history: vHistory, scan: vScan }[v]();
+    var html = {
+      home: vHome, login: vLogin, loading: vLoading, client: vClient, clients: vClients, clientform: vClientForm, newclient: vNewClient, cat: vCat,
+      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vScan,
+      history: function () { return O.hist.html(hset, confirmKey); }
+    }[v]();
+    var y = window.scrollY;
     app.innerHTML = html;
-    window.scrollTo(0, 0);
-    if (v === "client" || v === "cat") drawPick();
+    window.scrollTo(0, keepScroll ? y : 0);
+    if (v === "client" || v === "clients" || v === "cat") drawPick();
     if (v === "products") {
       drawProducts();
       if (mode === "order") {
         setDock('<div class="docknote" id="dnote"></div><div class="dock2"><button class="more" id="more" disabled>+ Άλλο προϊόν</button>' +
-          '<button class="send" id="send" disabled>Καταχώρηση παραγγελίας</button></div>');
+          '<button class="send" id="send" disabled>' + (S.editId ? "Αποθήκευση αλλαγών" : "Καταχώρηση παραγγελίας") + "</button></div>");
         updateSend();
       }
     }
+    if (v === "orderedit") {
+      setDock('<div class="docknote" id="dnote"></div><div class="dock2"><button class="send" id="send" disabled>Αποθήκευση αλλαγών</button></div>');
+      updateSend();
+    }
+    if (v === "clientform") { setDock('<button class="send" id="saveCF" disabled>Αποθήκευση</button>'); updateCF(); }
     if (v === "newclient") setDock('<button class="send" id="saveClient" disabled>Αποθήκευση πελάτη</button>');
-    if (v === "note") setDock('<button class="send" id="saveNote" disabled>Αποθήκευση επεξεργασίας</button>');
+    if (v === "note") { setDock('<button class="send" id="saveNote" disabled>Αποθήκευση επεξεργασίας</button>'); updateSave(); }
     if (v === "scan") {
       lastBad = "";
       O.scan.start($("cam"), onScan, function (code) { var m = $("camMsg"); m.textContent = SCAN_ERR[code] || SCAN_ERR.nocamera; m.hidden = false; });
@@ -326,13 +419,22 @@
     if (a === "back") history.back();
     else if (a === "new-order") { S = fresh(); mode = "order"; go("client"); }
     else if (a === "new-info") { S = fresh(); mode = "info"; go("cat"); }
-    else if (a === "history") go("history");
+    else if (a === "history") openHist("orders");
+    else if (a === "hist-catalog") openHist("catalog");
+    else if (a === "hist-clients") openHist("clients");
+    else if (a === "clients") { S = fresh(); go("clients"); }
+    else if (a === "edit-add") go("cat");
+    else if (t.dataset.hedit) editRec(t.dataset.hedit);
+    else if (t.dataset.hdel) { confirmKey = t.dataset.hdel; render("history", true); }
+    else if (t.dataset.hno) { confirmKey = ""; render("history", true); }
+    else if (t.dataset.hyes) delRec(t.dataset.hyes);
     else if (a === "scan") go("scan");
     else if (a === "refresh") { O.toast("Ενημέρωση…"); refresh(false); }
     else if (a === "token") { loginMsg = ""; render("login"); }
     else if (a === "edit-client") { S.edit = true; go("client"); }
     else if (a === "edit-cat") { S.edit = true; go("cat"); }
     else if (t.dataset.pick !== undefined) {
+      if (pick.kind === "cl") { openClientForm(t.dataset.pick); return; }
       if (pick.kind === "client") S.client = t.dataset.pick;
       else { S.cat = t.dataset.pick; S.mat = ""; S.q = ""; }
       if (S.edit) { S.edit = false; history.back(); }
@@ -343,28 +445,32 @@
     else if (t.dataset.m) { var m = t.dataset.m; setQty(m, (S.qty[m] || 0) - 1); $("q" + m).value = S.qty[m] || 0; }
     else if (t.dataset.prod) { S.prod = t.dataset.prod; go("note"); }
     else if (t.id === "more") history.back();
+    else if (t.id === "send" && S.editId) saveOrderEdit();
+    else if (t.id === "saveCF") saveCF();
     else if (t.id === "send") {
-      var items = Object.keys(S.qty).map(function (id) { var pr = prodById(id); return { id: id, name: pr ? pr.name : id, qty: S.qty[id] }; });
       var c = clientById(S.client);
-      if (!O.store.add({ kind: "order", client: c ? c.name : "", clientId: S.client, items: items })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+      if (!O.store.add({ kind: "order", client: c ? c.name : "", clientId: S.client, items: orderItems() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
       O.toast("Καταχωρήθηκε: " + (c ? c.name : ""));
       home(); sync(false);
     }
     else if (t.id === "saveNote") {
-      var pr2 = prodById(S.prod);
-      if (!O.store.add({ kind: "edit", product: pr2 ? pr2.name : "", productId: S.prod, changes: O.edit.changes(pr2), text: $("note").value.trim() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+      var pr2 = prodById(S.prod), rec2 = { product: pr2 ? pr2.name : "", productId: S.prod, changes: O.edit.changes(pr2), text: $("note").value.trim() };
+      var saved = S.editId ? O.store.update(S.editId, Object.assign(rec2, { sent: false, edited: new Date().toISOString() })) : O.store.add(Object.assign({ kind: "edit" }, rec2));
+      if (!saved) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
       O.toast("Η επεξεργασία καταχωρήθηκε");
-      home(); sync(false);
+      if (S.editId) history.back(); else home();
+      sync(false);
     }
     else if (a === "sync") { O.toast("Αποστολή…"); sync(true); }
-    else if (a === "new-client") go("newclient");
+    else if (a === "new-client") { ncFrom = view; go("newclient"); }
     else if (t.id === "saveClient") {
       var cl = O.newClient.values();
       if (!O.store.add({ kind: "client", client: cl, text: O.newClient.note() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
       var added = O.store.all().filter(function (r) { return r.kind === "client"; })[0];
       S.client = "new-" + added.id;
       O.toast("Ο πελάτης αποθηκεύτηκε: " + cl.shortName);
-      if (S.edit) { S.edit = false; history.go(-2); }
+      if (ncFrom === "clients") history.back();
+      else if (S.edit) { S.edit = false; history.go(-2); }
       else { history.replaceState({ v: "cat", d: depth }, ""); render("cat"); }
       sync(false);
     }
@@ -374,7 +480,7 @@
     if (el.id === "s") drawPick();
     else if (el.id === "pq") { S.q = el.value; drawProducts(); }
     else if (el.id === "note" || el.classList.contains("ef")) updateSave();
-    else if (el.classList.contains("cf")) $("saveClient").disabled = !O.newClient.ok();
+    else if (el.classList.contains("cf")) { if ($("saveCF")) updateCF(); else if ($("saveClient")) $("saveClient").disabled = !O.newClient.ok(); }
     else if (el.dataset && el.dataset.i) {
       var clean = el.value.replace(/\D/g, "").slice(0, 5);
       if (clean !== el.value) el.value = clean;

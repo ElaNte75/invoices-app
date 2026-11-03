@@ -14,6 +14,10 @@
     if (r.kind === "order") {
       p.client = { id: r.clientId || "", name: r.client };
       p.items = r.items.map(function (i) { return Array.isArray(i) ? { name: i[0], qty: i[1] } : i; });
+    } else if (r.kind === "client") {
+      p.localId = "new-" + r.id;
+      p.customer = r.client;
+      p.note = r.text || "";
     } else if (r.kind === "edit") {
       p.product = { id: r.productId || "", name: r.product };
       p.changes = r.changes;
@@ -25,7 +29,7 @@
     return p;
   }
   function put(r) {
-    var what = r.kind === "order" ? "παραγγελία " + r.client : r.kind === "edit" ? "διόρθωση καταλόγου για " + r.product : "πληροφορία για " + r.product;
+    var what = r.kind === "order" ? "παραγγελία " + r.client : r.kind === "client" ? "νέος πελάτης " + r.client.shortName : r.kind === "edit" ? "διόρθωση καταλόγου για " + r.product : "πληροφορία για " + r.product;
     var body = {
       message: "Από την εφαρμογή παραγγελιών: " + what,
       content: b64(JSON.stringify(payload(r), null, 2) + "\n"),

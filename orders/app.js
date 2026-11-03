@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 9;
+  var VERSION = 10;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -55,7 +55,7 @@
     var left = O.store.pending().length;
     var pend = left ? '<div class="msg">' + left + (left === 1 ? " καταχώρηση περιμένει" : " καταχωρήσεις περιμένουν") + " αποστολή." + (syncMsg ? " " + esc(syncMsg) : "") +
       '</div><button class="small" data-act="sync">Αποστολή τώρα</button>' : "";
-    return '<h1>Παραγγελίες</h1>' + pend + '<div class="stack">' +
+    return '<h1>Παραγγελίες</h1>' + pend + '<div class="stack home">' +
       '<button class="big primary" data-act="new-order">Νέα παραγγελία</button>' +
       '<button class="big" data-act="scan">Σκανάρισμα QR τιμολογίου<small>καταχώρηση τιμολογίου με την κάμερα</small></button>' +
       '<button class="big" data-act="clients">Επεξεργασία πελατών<small>στοιχεία πελάτη, νέος πελάτης</small></button>' +

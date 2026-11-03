@@ -58,6 +58,8 @@ h1 { font-family: var(--font-display); font-size: 30px; margin: 14px 0 12px; let
 
 /* πλοήγηση και επιλογές */
 .back { min-height: 56px; margin-top: 12px; padding: 0 20px; border: 2px solid var(--line); background: var(--surface); border-radius: 12px; font-family: var(--font-display); font-size: 22px; font-weight: 600; }
+.topbar { display: flex; gap: 10px; justify-content: space-between; align-items: center; }
+.topbar .back:last-child { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .search, .field { width: 100%; min-height: 56px; border: 2px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; padding: 0 14px; }
 textarea.field { padding: 12px 14px; min-height: 140px; resize: vertical; }
 .list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }

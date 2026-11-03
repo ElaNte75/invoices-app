@@ -30,11 +30,11 @@
     }).join("") + "</ul>";
   }
   function acts(r, confirmKey) {
-    if (r.passed) return "";
     var k = esc(key(r));
     if (confirmKey === key(r)) {
-      return '<div class="acts"><b class="ask">Σίγουρα;</b><button class="small danger" data-hyes="' + k + '">Ναι, διαγραφή</button><button class="small" data-hno="1">Άκυρο</button></div>';
+      return '<div class="acts"><b class="ask">Σίγουρα;</b><button class="small danger" data-hyes="' + k + '">' + (r.passed ? "Ναι, αφαίρεση" : "Ναι, διαγραφή") + '</button><button class="small" data-hno="1">Άκυρο</button></div>';
     }
+    if (r.passed) return '<div class="acts"><button class="small danger" data-hdel="' + k + '">Αφαίρεση από το ιστορικό</button></div>';
     var edit = r.id && r.kind !== "qr" && r.kind !== "info" ? '<button class="small" data-hedit="' + k + '">Επεξεργασία</button>' : "";
     return '<div class="acts">' + edit + '<button class="small danger" data-hdel="' + k + '">Διαγραφή</button></div>';
   }

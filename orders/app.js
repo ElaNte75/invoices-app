@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 6;
+  var VERSION = 7;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var S = fresh();
   var pick = { items: [], kind: "" };
@@ -53,7 +53,8 @@
       '</div><button class="small" data-act="sync">Αποστολή τώρα</button>' : "";
     return '<h1>Παραγγελίες</h1>' + pend + '<div class="stack">' +
       '<button class="big primary" data-act="new-order">Νέα παραγγελία</button>' +
-      '<button class="big" data-act="new-info">Διόρθωση καταλόγου<small>πάχος, υλικό, διαστάσεις, περιγραφή</small></button>' +
+      '<button class="big" data-act="scan">Σκανάρισμα QR τιμολογίου<small>καταχώρηση τιμολογίου με την κάμερα</small></button>' +
+      '<button class="big" data-act="new-info">Επεξεργασία καταλόγου<small>πάχος, υλικό, διαστάσεις, περιγραφή</small></button>' +
       '<button class="big" data-act="history">Ιστορικό<small>' + n + " εγγραφές</small></button></div>" +
       '<p class="status">' + d.clients.length + " πελάτες · " + d.products.length + " προϊόντα · ενημερώθηκαν " + when + "</p>" +
       '<div class="row2"><button class="small" data-act="refresh">Ανανέωση δεδομένων</button>' +
@@ -160,9 +161,10 @@
   function total() { return Object.keys(S.qty).reduce(function (s, k) { return s + S.qty[k]; }, 0); }
   function updateSend() {
     var b = $("send"); if (!b) return;
-    var n = total();
+    var n = total(), k = Object.keys(S.qty).length;
     b.disabled = !n;
-    b.textContent = n ? "Καταχώρηση (" + n + " τεμ.)" : "Καταχώρηση παραγγελίας";
+    $("more").disabled = !n;
+    $("dnote").textContent = n ? k + (k === 1 ? " προϊόν" : " προϊόντα") + " στην παραγγελία · " + n + " τεμ." : "Δεν έχεις βάλει ακόμα ποσότητα";
   }
   function setQty(id, n) {
     n = Math.max(0, Math.min(99999, n || 0));
@@ -174,7 +176,7 @@
   /* ---------- πληροφορία ---------- */
   function vNote() {
     var p = prodById(S.prod);
-    return BACK + "<h1>Διόρθωση προϊόντος</h1>" + O.edit.html(p) +
+    return BACK + "<h1>Επεξεργασία προϊόντος</h1>" + O.edit.html(p) +
       '<div class="label">Σχόλιο (προαιρετικά)</div><textarea class="field" id="note" placeholder="Γράψε εδώ…" aria-label="Σχόλιο"></textarea>';
   }
   function updateSave() {
@@ -205,9 +207,11 @@
         out += '<div class="entry"><span class="kind">Νέος πελάτης · ' + time + "</span><b>" + esc(cf.shortName || "") + "</b><ul>" +
           [["name", "Επωνυμία"], ["afm", "ΑΦΜ"], ["city", "Πόλη"], ["address", "Διεύθυνση"], ["phone", "Τηλέφωνο"], ["doy", "ΔΟΥ"], ["profession", "Επάγγελμα"]].filter(function (x) { return cf[x[0]]; })
             .map(function (x) { return "<li>" + x[1] + ": " + esc(cf[x[0]]) + "</li>"; }).join("") + "</ul>" + (r.text ? "<div>" + esc(r.text) + "</div>" : "") + st + "</div>";
+      } else if (r.kind === "qr") {
+        out += '<div class="entry"><span class="kind">Τιμολόγιο QR · ' + time + "</span><b>Σκανάρισμα τιμολογίου</b><div class=\"sub\">Περιμένει καταχώριση από τον Claude</div>" + st + "</div>";
       } else if (r.kind === "edit") {
         var lab = {}; O.edit.fields.forEach(function (f) { lab[f.k] = f.label.replace(/ \(.*\)/, ""); });
-        out += '<div class="entry"><span class="kind">Διόρθωση · ' + time + "</span><b>" + esc(r.product) + "</b><ul>" +
+        out += '<div class="entry"><span class="kind">Επεξεργασία · ' + time + "</span><b>" + esc(r.product) + "</b><ul>" +
           Object.keys(r.changes || {}).map(function (k) {
             var c = r.changes[k];
             return "<li>" + esc(lab[k] || k) + ": " + (esc(O.edit.show(c.from)) || "—") + " → " + (esc(O.edit.show(c.to)) || "—") + "</li>";
@@ -219,20 +223,56 @@
     return BACK + "<h1>Ιστορικό</h1>" + (out || '<p class="empty">Δεν υπάρχουν εγγραφές ακόμα.</p>');
   }
 
+  /* ---------- σκανάρισμα QR ---------- */
+  function vScan() {
+    return BACK + "<h1>Σκανάρισμα QR</h1><p class=\"sub\">Στόχευσε το QR του τιμολογίου. Καταχωρείται μόνο του μόλις διαβαστεί.</p>" +
+      '<video class="cam" id="cam" playsinline muted></video><div class="msg" id="camMsg" hidden></div>';
+  }
+  var SCAN_ERR = {
+    denied: "Η κάμερα δεν επιτράπηκε. Στο Chrome πάτα το εικονίδιο δίπλα στη διεύθυνση, άνοιξε τις ρυθμίσεις του site και δώσε άδεια στην κάμερα.",
+    nocamera: "Δεν βρέθηκε κάμερα.",
+    unsupported: "Η κάμερα δεν υποστηρίζεται σε αυτό το πρόγραμμα. Χρειάζεται Chrome.",
+    lib: "Δεν φόρτωσε ο αναγνώστης QR. Έλεγξε τη σύνδεση και δοκίμασε ξανά."
+  };
+  var lastBad = "";
+  function onScan(text) {
+    text = String(text).trim();
+    if (!/^https?:\/\/[^\s]*aade\.gr\//i.test(text)) {
+      if (text !== lastBad) O.toast("Αυτό δεν είναι QR τιμολογίου ΑΑΔΕ.");
+      lastBad = text; return false;
+    }
+    if (O.store.all().some(function (r) { return r.kind === "qr" && r.url === text; })) {
+      O.toast("Αυτό το τιμολόγιο το έχεις ήδη σκανάρει."); home(); return true;
+    }
+    if (!O.store.add({ kind: "qr", url: text })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); home(); return true; }
+    O.toast("Καταχωρήθηκε το τιμολόγιο");
+    home(); sync(false);
+    return true;
+  }
+
   /* ---------- εμφάνιση ---------- */
   function render(v) {
     view = v;
+    O.scan.stop();
     setDock("");
-    var html = { home: vHome, login: vLogin, loading: vLoading, client: vClient, newclient: vNewClient, cat: vCat, products: vProducts, note: vNote, history: vHistory }[v]();
+    var html = { home: vHome, login: vLogin, loading: vLoading, client: vClient, newclient: vNewClient, cat: vCat, products: vProducts, note: vNote, history: vHistory, scan: vScan }[v]();
     app.innerHTML = html;
     window.scrollTo(0, 0);
     if (v === "client" || v === "cat") drawPick();
     if (v === "products") {
       drawProducts();
-      if (mode === "order") { setDock('<button class="send" id="send" disabled>Καταχώρηση παραγγελίας</button>'); updateSend(); }
+      if (mode === "order") {
+        setDock('<div class="docknote" id="dnote"></div><div class="dock2"><button class="more" id="more" disabled>+ Άλλο προϊόν</button>' +
+          '<button class="send" id="send" disabled>Καταχώρηση παραγγελίας</button></div>');
+        updateSend();
+      }
     }
     if (v === "newclient") setDock('<button class="send" id="saveClient" disabled>Αποθήκευση πελάτη</button>');
-    if (v === "note") setDock('<button class="send" id="saveNote" disabled>Αποθήκευση διόρθωσης</button>');
+    if (v === "note") setDock('<button class="send" id="saveNote" disabled>Αποθήκευση επεξεργασίας</button>');
+    if (v === "scan") {
+      lastBad = "";
+      O.scan.start($("cam"), onScan, function (code) { var m = $("camMsg"); m.textContent = SCAN_ERR[code] || SCAN_ERR.nocamera; m.hidden = false; });
+    }
   }
   function go(v) {
     depth++;
@@ -287,6 +327,7 @@
     else if (a === "new-order") { S = fresh(); mode = "order"; go("client"); }
     else if (a === "new-info") { S = fresh(); mode = "info"; go("cat"); }
     else if (a === "history") go("history");
+    else if (a === "scan") go("scan");
     else if (a === "refresh") { O.toast("Ενημέρωση…"); refresh(false); }
     else if (a === "token") { loginMsg = ""; render("login"); }
     else if (a === "edit-client") { S.edit = true; go("client"); }
@@ -301,6 +342,7 @@
     else if (t.dataset.p) { var p = t.dataset.p; setQty(p, (S.qty[p] || 0) + 1); $("q" + p).value = S.qty[p] || 0; }
     else if (t.dataset.m) { var m = t.dataset.m; setQty(m, (S.qty[m] || 0) - 1); $("q" + m).value = S.qty[m] || 0; }
     else if (t.dataset.prod) { S.prod = t.dataset.prod; go("note"); }
+    else if (t.id === "more") history.back();
     else if (t.id === "send") {
       var items = Object.keys(S.qty).map(function (id) { var pr = prodById(id); return { id: id, name: pr ? pr.name : id, qty: S.qty[id] }; });
       var c = clientById(S.client);
@@ -311,7 +353,7 @@
     else if (t.id === "saveNote") {
       var pr2 = prodById(S.prod);
       if (!O.store.add({ kind: "edit", product: pr2 ? pr2.name : "", productId: S.prod, changes: O.edit.changes(pr2), text: $("note").value.trim() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
-      O.toast("Η διόρθωση καταχωρήθηκε");
+      O.toast("Η επεξεργασία καταχωρήθηκε");
       home(); sync(false);
     }
     else if (a === "sync") { O.toast("Αποστολή…"); sync(true); }

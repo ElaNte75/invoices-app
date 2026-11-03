@@ -2,7 +2,7 @@
    Κατεβαίνουν μόνο τα αρχεία που άλλαξαν από την τελευταία φορά. */
 (function (O) {
   var TOKEN_KEY = "orders_token";
-  var CACHE_KEY = "orders_data_v1";
+  var CACHE_KEY = "orders_data_v2";
   var REPO = 'repository(owner:"ElaNte75", name:"Invoices")';
   var TREES = "query { " + REPO + " {" +
     ' c: object(expression:"main:data/customers") { ... on Tree { entries { name oid } } }' +
@@ -52,6 +52,7 @@
       name: j.fullName || j.description || f.id,
       mat: j.material || "",
       th: j.thickness || "",
+      len: j.length || "", wid: j.width || "", dep: j.depth || "", dia: j.diameter || "",
       feats: j.features || []
     };
   }

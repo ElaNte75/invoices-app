@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 11;
+  var VERSION = 12;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -333,7 +333,7 @@
     return true;
   }
 
-  /* Φόρμες πελάτη: δύο ίσα κουμπιά, Ακύρωση και Καταχώρηση */
+  /* Φόρμες πελάτη και προϊόντος: δύο ίσα κουμπιά, Ακύρωση και Καταχώρηση */
   function formDock(saveId) {
     return '<div class="dock2 eq"><button class="more" id="cancelForm">Ακύρωση</button><button class="send" id="' + saveId + '" disabled>Καταχώρηση</button></div>';
   }
@@ -366,7 +366,7 @@
     }
     if (v === "clientform") { setDock(formDock("saveCF")); updateCF(); }
     if (v === "newclient") setDock(formDock("saveClient"));
-    if (v === "note") { setDock('<button class="send" id="saveNote" disabled>Αποθήκευση επεξεργασίας</button>'); updateSave(); }
+    if (v === "note") { setDock(formDock("saveNote")); updateSave(); }
     if (v === "scan") {
       lastBad = "";
       O.scan.start($("cam"), onScan, function (code) { var m = $("camMsg"); m.textContent = SCAN_ERR[code] || SCAN_ERR.nocamera; m.hidden = false; });

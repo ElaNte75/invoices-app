@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 12;
+  var VERSION = 13;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -355,7 +355,7 @@
     if (v === "products") {
       drawProducts();
       if (mode === "order") {
-        setDock('<div class="docknote" id="dnote"></div><div class="dock2"><button class="more" id="more" disabled>+ Άλλο προϊόν</button>' +
+        setDock('<div class="docknote" id="dnote"></div><div class="dock2 eq"><button class="more" id="more" disabled>Προσθήκη επόμενου</button>' +
           '<button class="send" id="send" disabled>' + (S.editId ? "Αποθήκευση αλλαγών" : "Καταχώρηση παραγγελίας") + "</button></div>");
         updateSend();
       }

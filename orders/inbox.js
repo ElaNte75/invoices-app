@@ -5,6 +5,7 @@
   function call(url, opts) {
     opts = opts || {};
     opts.headers = { Authorization: "Bearer " + O.token.get(), "Content-Type": "application/json" };
+    opts.cache = "no-store"; /* το GitHub επιτρέπει στον browser να κρατά τις λίστες 60 δευτερόλεπτα: χωρίς αυτό ένα αρχείο που μόλις στάλθηκε φαινόταν «περασμένο» και έσβηνε από το ιστορικό */
     return fetch(url, opts).then(function (res) {
       if (res.status === 401) throw { code: "auth" };
       return res;
@@ -25,6 +26,7 @@
         list.forEach(function (e) { by[e.name] = e.sha; });
         sent.forEach(function (r) {
           var sha = by[O.fileName(r)];
+          if (!sha && !r.passed && r.sentAt && Date.now() - new Date(r.sentAt).getTime() < 300000) return; /* μόλις στάλθηκε: δεν θεωρείται περασμένο */
           if (!!r.passed === !!sha || (sha && r.sha !== sha)) {
             O.store.update(r.id, { passed: !sha, sha: sha || r.sha });
             changed = true;

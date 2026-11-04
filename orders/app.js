@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 13;
+  var VERSION = 14;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -275,6 +275,31 @@
     O.toast("Η παραγγελία ενημερώθηκε");
     home(); sync(false);
   }
+  /* Νέα παραγγελία: αν ο ίδιος πελάτης έχει ήδη παραγγελία που δεν έχει περαστεί στη βάση, τα προϊόντα προστίθενται σε εκείνη */
+  function itemsOf(r) { return r.items.map(function (i) { return Array.isArray(i) ? { id: "", name: i[0], qty: i[1] } : { id: i.id || "", name: i.name, qty: i.qty }; }); }
+  function pendingOrder(clientId) {
+    return O.store.all().filter(function (r) { return r.kind === "order" && r.id && !r.passed && r.clientId === clientId; })[0];
+  }
+  function saveOrder() {
+    var c = clientById(S.client), cid = S.client, items = orderItems(), btn = $("send");
+    if (btn) btn.disabled = true;
+    O.inbox.refresh().then(function () {
+      var r = pendingOrder(cid), ok, merged = false;
+      if (r) {
+        var all = itemsOf(r);
+        items.forEach(function (n) {
+          var f = all.filter(function (o) { return n.id ? o.id === n.id : o.name === n.name; })[0];
+          if (f) f.qty += n.qty; else all.push(n);
+        });
+        ok = O.store.update(r.id, { items: all, sent: false, edited: new Date().toISOString() });
+        merged = true;
+      } else ok = O.store.add({ kind: "order", client: c ? c.name : "", clientId: cid, items: items });
+      if (!ok) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); if (btn) btn.disabled = false; return; }
+      O.toast((merged ? "Προστέθηκε στην παραγγελία: " : "Καταχωρήθηκε: ") + (c ? c.name : ""));
+      home(); sync(false);
+    });
+  }
+
   function updateSave() {
     var b = $("saveNote"), p = prodById(S.prod);
     if (b && p) b.disabled = !(Object.keys(O.edit.changes(p)).length || $("note").value.trim());
@@ -453,10 +478,7 @@
     else if (t.id === "send" && S.editId) saveOrderEdit();
     else if (t.id === "saveCF") saveCF();
     else if (t.id === "send") {
-      var c = clientById(S.client);
-      if (!O.store.add({ kind: "order", client: c ? c.name : "", clientId: S.client, items: orderItems() })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
-      O.toast("Καταχωρήθηκε: " + (c ? c.name : ""));
-      home(); sync(false);
+      saveOrder();
     }
     else if (t.id === "saveNote") {
       var pr2 = prodById(S.prod), rec2 = { product: pr2 ? pr2.name : "", productId: S.prod, changes: O.edit.changes(pr2), text: $("note").value.trim() };

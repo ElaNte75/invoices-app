@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 14;
+  var VERSION = 15;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -101,6 +101,9 @@
       if (r.clientId) u.clients[r.clientId] = (u.clients[r.clientId] || 0) + 1;
       r.items.forEach(function (i) { if (i.id) u.prods[i.id] = (u.prods[i.id] || 0) + 1; });
     });
+    var d = O.store.usage();
+    Object.keys(d.clients).forEach(function (k) { u.clients[k] = (u.clients[k] || 0) + d.clients[k]; });
+    Object.keys(d.prods).forEach(function (k) { u.prods[k] = (u.prods[k] || 0) + d.prods[k]; });
     return u;
   }
   function clientItems() {
@@ -527,6 +530,6 @@
   /* ---------- εκκίνηση ---------- */
   history.replaceState({ v: "home", d: 0 }, "");
   if (!O.token.get()) render("login");
-  else if (O.loadCache()) { render("home"); refresh(true); sync(false); }
+  else if (O.loadCache()) { render("home"); refresh(true); sync(false); O.inbox.refresh().then(function (c) { if (c && view === "home") render("home"); }); }
   else refresh(false);
 })(window.O = window.O || {});

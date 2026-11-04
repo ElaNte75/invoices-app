@@ -30,6 +30,7 @@
             changed = true;
           }
         });
+        if (O.store.purgePassed()) changed = true;
         return changed;
       }).catch(function () { return false; });
     },

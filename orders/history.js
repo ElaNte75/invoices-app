@@ -7,6 +7,11 @@
     clients: { title: "Ιστορικό πελατών", kinds: ["client", "clientEdit"] }
   };
   function esc(s) { return O.ui.esc(s); }
+  /* Το όνομα όπως είναι τώρα στον κατάλογο (αν δεν βρεθεί, αυτό που αποθηκεύτηκε με την παραγγελία) */
+  function curName(it) {
+    var p = it.id && O.data.products.filter(function (x) { return x.id === it.id; })[0];
+    return p ? p.name : it.name;
+  }
   function inSet(set, r) { return SETS[set].kinds.indexOf(r.kind) > -1; }
   function list(set) { return O.store.all().filter(function (r) { return inSet(set, r); }); }
   function key(r) { return r.id || r.t; }
@@ -43,7 +48,7 @@
     var kind, title, inner = "";
     if (r.kind === "order") {
       kind = "Παραγγελία"; title = r.client;
-      inner = "<ul>" + r.items.map(function (i) { return Array.isArray(i) ? "<li>" + esc(i[0]) + " × " + i[1] + "</li>" : "<li>" + esc(i.name) + " × " + i.qty + "</li>"; }).join("") + "</ul>";
+      inner = "<ul>" + r.items.map(function (i) { var it = Array.isArray(i) ? { name: i[0], qty: i[1] } : i; return "<li>" + esc(curName(it)) + " × " + it.qty + " τμχ</li>"; }).join("") + "</ul>";
     } else if (r.kind === "qr") {
       kind = "Τιμολόγιο QR"; title = "Σκανάρισμα τιμολογίου";
       inner = '<div class="sub">Περιμένει καταχώριση από τον Claude</div>';

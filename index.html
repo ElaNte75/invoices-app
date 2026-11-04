@@ -831,7 +831,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const feats = Array.isArray(p.features) ? p.features : [];
     const parts = name.match(DIM_RE) || [];
     let dim = parts.map(x => /^–/.test(x) ? " " + x.replace(/\s+/g, " ") : x.replace(/\s+/g, "")).join("").trim();
-    if (!dim) dim = [p.diameter ? `Φ${qn(num(p.diameter))}` : "", p.length ? `Μ${qn(num(p.length))}×Π${qn(num(p.width))}` : "", p.depth ? `Υ${qn(num(p.depth))}` : ""].filter(Boolean).join("×");
+    if (!dim) dim = [p.diameter ? `Φ${qn(num(p.diameter))}` : ""].concat((p.diameter ? [p.depth] : [p.length, p.width, p.depth]).filter(Boolean).map(num).sort((a, b) => b - a).map(qn)).filter(Boolean).join("×");
     const painted = /βαμμέν/i.test(p.material || "") || feats.includes("βαμμένο") || /βαμμέν/i.test(name);
     const mat = String(p.material || "").replace(/\s*βαμμέν\S*/i, "").trim();
     const txt = fold([name, catName, ...feats].join(" "));

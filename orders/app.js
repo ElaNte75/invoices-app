@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 17;
+  var VERSION = 18;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -280,13 +280,40 @@
   }
   /* Νέα παραγγελία: αν ο ίδιος πελάτης έχει ήδη παραγγελία που δεν έχει περαστεί στη βάση, τα προϊόντα προστίθενται σε εκείνη */
   function itemsOf(r) { return r.items.map(function (i) { return Array.isArray(i) ? { id: "", name: i[0], qty: i[1] } : { id: i.id || "", name: i.name, qty: i.qty }; }); }
+  /* Αν ο ίδιος πελάτης έχει πάνω από μία παραγγελία που δεν έχει περαστεί, ενοποιούνται στην παλαιότερη.
+     Τα id που έχουν ήδη μπει στο merged δεν προστίθενται ξανά, ώστε να μη διπλασιαστούν ποσότητες αν διακοπεί στη μέση. */
+  function consolidate() {
+    var groups = {};
+    O.store.all().filter(function (r) { return r.kind === "order" && r.id && !r.passed; }).forEach(function (r) {
+      var k = r.clientId || ""; (groups[k] = groups[k] || []).push(r);
+    });
+    var work = Object.keys(groups).filter(function (k) { return groups[k].length > 1; });
+    if (!work.length) return Promise.resolve(false);
+    return work.reduce(function (p, k) {
+      return p.then(function () {
+        var g = groups[k].sort(function (a, b) { return a.t < b.t ? -1 : 1; }), keep = g[0], done = (keep.merged || []).slice(), items = itemsOf(keep);
+        g.slice(1).forEach(function (o) {
+          if (done.indexOf(o.id) > -1) return;
+          itemsOf(o).forEach(function (n) {
+            var f = items.filter(function (x) { return n.id ? x.id === n.id : x.name === n.name; })[0];
+            if (f) f.qty += n.qty; else items.push(n);
+          });
+          done.push(o.id);
+        });
+        O.store.update(keep.id, { items: items, merged: done, sent: false, edited: new Date().toISOString() });
+        return g.slice(1).reduce(function (q, o) {
+          return q.then(function () { return O.inbox.remove(o).then(function () { O.store.remove(o); }); });
+        }, Promise.resolve());
+      });
+    }, Promise.resolve()).then(function () { return true; }, function () { return true; });
+  }
   function pendingOrder(clientId) {
     return O.store.all().filter(function (r) { return r.kind === "order" && r.id && !r.passed && r.clientId === clientId; })[0];
   }
   function saveOrder() {
     var c = clientById(S.client), cid = S.client, items = orderItems(), btn = $("send");
     if (btn) btn.disabled = true;
-    O.inbox.refresh().then(function () {
+    O.inbox.refresh().then(consolidate).then(function () {
       var r = pendingOrder(cid), ok, merged = false;
       if (r) {
         var all = itemsOf(r);
@@ -312,7 +339,10 @@
   function openHist(set) {
     hset = set; confirmKey = "";
     go("history");
-    O.inbox.refresh().then(function (changed) { if (changed && view === "history") render("history", true); });
+    O.inbox.refresh().then(function (changed) { return consolidate().then(function (c) { return changed || c; }); }).then(function (changed) {
+      if (changed && view === "history") render("history", true);
+      sync(false);
+    });
   }
   function editRec(k) {
     var r = O.hist.find(k); if (!r || r.passed) return;
@@ -530,6 +560,6 @@
   /* ---------- εκκίνηση ---------- */
   history.replaceState({ v: "home", d: 0 }, "");
   if (!O.token.get()) render("login");
-  else if (O.loadCache()) { render("home"); refresh(true); sync(false); O.inbox.refresh().then(function (c) { if (c && view === "home") render("home"); }); }
+  else if (O.loadCache()) { render("home"); refresh(true); sync(false); O.inbox.refresh().then(function (c) { return consolidate().then(function (d) { return c || d; }); }).then(function (c) { if (c && view === "home") render("home"); sync(false); }); }
   else refresh(false);
 })(window.O = window.O || {});

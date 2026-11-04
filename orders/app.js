@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 20;
+  var VERSION = 21;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -219,7 +219,7 @@
       return '<div class="prow' + (n ? " has" : "") + '" id="r' + p.id + '"><div class="pname">' + esc(p.name) + '</div><div class="tags">' + tagsOf(p) + "</div>" +
         '<div class="step"><button data-m="' + p.id + '" aria-label="Λιγότερο">−</button>' +
         '<input id="q' + p.id + '" data-i="' + p.id + '" type="text" inputmode="numeric" pattern="[0-9]*" value="' + n + '" aria-label="Ποσότητα">' +
-        '<button class="plus" data-p="' + p.id + '" aria-label="Περισσότερο">+</button><span class="unit">τεμ.</span></div></div>';
+        '<button class="plus" data-p="' + p.id + '" aria-label="Περισσότερο">+</button><span class="unit">τμχ</span></div></div>';
     }).join("") || '<p class="empty">Δεν βρέθηκε προϊόν.</p>';
   }
   function total() { return Object.keys(S.qty).reduce(function (s, k) { return s + S.qty[k]; }, 0); }
@@ -228,7 +228,7 @@
     var n = total(), k = Object.keys(S.qty).filter(function (id) { return S.qty[id] > 0; }).length;
     b.disabled = !n;
     if ($("more")) $("more").disabled = !n;
-    $("dnote").textContent = n ? k + (k === 1 ? " προϊόν" : " προϊόντα") + " στην παραγγελία · " + n + " τεμ." : "Δεν έχεις βάλει ακόμα ποσότητα";
+    $("dnote").textContent = n ? k + (k === 1 ? " προϊόν" : " προϊόντα") + " στην παραγγελία · " + n + " τμχ" : "Δεν έχεις βάλει ακόμα ποσότητα";
   }
   function setQty(id, n) {
     n = Math.max(0, Math.min(99999, n || 0));
@@ -268,7 +268,7 @@
       return '<div class="prow has" id="r' + id + '"><div class="pname">' + esc(itemName(id)) + "</div>" +
         '<div class="step"><button data-m="' + id + '" aria-label="Λιγότερο">−</button>' +
         '<input id="q' + id + '" data-i="' + id + '" type="text" inputmode="numeric" pattern="[0-9]*" value="' + S.qty[id] + '" aria-label="Ποσότητα">' +
-        '<button class="plus" data-p="' + id + '" aria-label="Περισσότερο">+</button><span class="unit">τεμ.</span></div></div>';
+        '<button class="plus" data-p="' + id + '" aria-label="Περισσότερο">+</button><span class="unit">τμχ</span></div></div>';
     }).join("");
     return BACK + "<h1>Επεξεργασία παραγγελίας</h1><div class=\"crumbs\">" + clientCrumb() + '</div><p class="sub">Βάλε 0 για να βγει ένα προϊόν.</p><div class="list">' + rows +
       '</div><button class="big add2" data-act="edit-add">+ Προσθήκη προϊόντος</button>';

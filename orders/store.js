@@ -43,6 +43,13 @@
       list.push(rec);
       return write(list);
     },
+    /* Προσθέτει καταχώριση που υπάρχει ήδη στο inbox (με το δικό της id και ώρα). Αν υπάρχει ήδη, δεν κάνει τίποτα. */
+    insert: function (rec) {
+      var list = read();
+      if (list.some(function (r) { return r.id === rec.id; })) return false;
+      list.push(rec);
+      return write(list);
+    },
     remove: function (rec) {
       return write(read().filter(function (r) { return !(r.t === rec.t && r.id === rec.id); }));
     },

@@ -2,7 +2,7 @@
    Κάθε εγγραφή έχει Επεξεργασία και Διαγραφή όσο δεν έχει περαστεί στη βάση. */
 (function (O) {
   var SETS = {
-    orders: { title: "Ιστορικό παραγγελιών", kinds: ["order", "qr"] },
+    orders: { title: "Ιστορικό παραγγελιών", kinds: ["order", "qr", "photo"] },
     catalog: { title: "Ιστορικό επεξεργασίας καταλόγου", kinds: ["edit", "info"] },
     clients: { title: "Ιστορικό πελατών", kinds: ["client", "clientEdit"] }
   };
@@ -40,7 +40,7 @@
       return '<div class="acts"><b class="ask">Σίγουρα;</b><button class="small danger" data-hyes="' + k + '">' + (r.passed ? "Ναι, αφαίρεση" : "Ναι, διαγραφή") + '</button><button class="small" data-hno="1">Άκυρο</button></div>';
     }
     if (r.passed) return '<div class="acts"><button class="small danger" data-hdel="' + k + '">Αφαίρεση από το ιστορικό</button></div>';
-    var edit = r.id && r.kind !== "qr" && r.kind !== "info" ? '<button class="small" data-hedit="' + k + '">Επεξεργασία</button>' : "";
+    var edit = r.id && r.kind !== "qr" && r.kind !== "info" && r.kind !== "photo" ? '<button class="small" data-hedit="' + k + '">Επεξεργασία</button>' : "";
     return '<div class="acts">' + edit + '<button class="small danger" data-hdel="' + k + '">Διαγραφή</button></div>';
   }
   function entry(r) {
@@ -52,6 +52,12 @@
     } else if (r.kind === "qr") {
       kind = "Τιμολόγιο QR"; title = "Σκανάρισμα τιμολογίου";
       inner = '<div class="sub">Περιμένει καταχώριση από τον Claude</div>';
+    } else if (r.kind === "photo") {
+      var rel = r.rel && O.store.all().filter(function (x) { return O.fileName(x) === r.rel; })[0];
+      kind = "Φωτογραφία"; title = O.photoKindLabel(r.pk);
+      inner = (O.photo.get(r.id) ? '<img class="thumb" alt="" src="' + O.photo.get(r.id) + '">' : "") +
+        (r.text ? "<div>" + esc(r.text) + "</div>" : "") +
+        (rel ? '<div class="sub">Σχετίζεται με: ' + esc(rel.kind === "order" ? "παραγγελία " + rel.client : "τιμολόγιο QR") + "</div>" : "");
     } else if (r.kind === "client") {
       var cf = r.client || {};
       kind = "Νέος πελάτης"; title = cf.shortName || "";

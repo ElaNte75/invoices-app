@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 21;
+  var VERSION = 22;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -57,7 +57,7 @@
       '</div><button class="small" data-act="sync">Αποστολή τώρα</button>' : "";
     return '<h1>Παραγγελίες</h1>' + pend + '<div class="stack home">' +
       '<button class="big primary" data-act="new-order">Νέα παραγγελία</button>' +
-      '<button class="big" data-act="scan">Σκανάρισμα QR τιμολογίου<small>καταχώρηση τιμολογίου με την κάμερα</small></button>' +
+      '<button class="big" data-act="docs">Παραστατικά<small>σκανάρισμα QR ή φωτογραφία</small></button>' +
       '<button class="big" data-act="clients">Επεξεργασία πελατών<small>στοιχεία πελάτη, νέος πελάτης</small></button>' +
       '<button class="big" data-act="new-info">Επεξεργασία καταλόγου<small>πάχος, υλικό, διαστάσεις, περιγραφή</small></button>' +
       '<button class="big" data-act="history">Ιστορικό παραγγελιών<small>' + n + " εγγραφές</small></button></div>" +
@@ -364,6 +364,56 @@
     }).then(function () { if (view === "history") render("history", true); });
   }
 
+  /* ---------- παραστατικά: QR ή φωτογραφία ---------- */
+  function vDocs() {
+    return BACK + "<h1>Παραστατικά</h1>" + '<div class="stack">' +
+      '<button class="big" data-act="scan">Σκανάρισμα QR<small>τιμολόγιο με την κάμερα</small></button>' +
+      '<button class="big" data-act="photo">Φωτογραφία<small>δελτίο, παραστατικό, σφραγίδα</small></button></div>';
+  }
+  var P = { kind: "partner", data: "", rel: "", note: "", busy: false };
+  function relOptions() {
+    var o = '<option value="">Κανένα</option>';
+    O.store.all().filter(function (r) { return (r.kind === "order" || r.kind === "qr") && !r.passed; }).forEach(function (r) {
+      var n = r.kind === "order" ? "Παραγγελία " + (r.client || "") : "Τιμολόγιο QR";
+      var d = r.t ? new Date(r.t).toLocaleDateString("el-GR", { day: "numeric", month: "numeric" }) : "";
+      o += '<option value="' + esc(O.fileName(r)) + '"' + (P.rel === O.fileName(r) ? " selected" : "") + ">" + esc(n + (d ? " · " + d : "")) + "</option>";
+    });
+    return o;
+  }
+  function vPhoto() {
+    return BACK + "<h1>Φωτογραφία</h1>" +
+      '<div class="seg">' + O.photoKinds.map(function (k) {
+        return '<button data-pk="' + k.k + '" aria-pressed="' + (P.kind === k.k) + '">' + k.label + "</button>";
+      }).join("") + "</div>" +
+      '<div class="row2" style="margin-top:12px"><button class="small" data-act="ph-cam">Τράβηγμα φωτογραφίας</button><button class="small" data-act="ph-gal">Από τη συλλογή</button></div>' +
+      '<input type="file" accept="image/*" capture="environment" id="phCam" hidden><input type="file" accept="image/*" id="phGal" hidden>' +
+      '<img class="thumb" id="phPrev" alt="" ' + (P.data ? 'src="' + P.data + '"' : "hidden") + ">" +
+      '<div class="label">Σχετίζεται με (προαιρετικά)</div><select class="field" id="phRel" aria-label="Σχετίζεται με">' + relOptions() + "</select>" +
+      '<div class="label">Σχόλιο (προαιρετικά)</div><textarea class="field" id="phNote" placeholder="Γράψε εδώ…" aria-label="Σχόλιο">' + esc(P.note) + "</textarea>";
+  }
+  function updatePhoto() { var b = $("savePhoto"); if (b) b.disabled = !P.data || P.busy; }
+  function onPhotoFile(file) {
+    if (!file) return;
+    P.busy = true; updatePhoto(); O.toast("Επεξεργασία φωτογραφίας…");
+    O.photo.compress(file).then(function (d) {
+      P.data = d; P.busy = false;
+      var im = $("phPrev"); if (im) { im.src = d; im.hidden = false; }
+      updatePhoto();
+    }).catch(function () { P.busy = false; updatePhoto(); O.toast("Η φωτογραφία δεν διαβάστηκε."); });
+  }
+  function savePhoto() {
+    if (!P.data) return;
+    if (!O.store.add({ kind: "photo", pk: P.kind, text: P.note.trim(), rel: P.rel })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+    var rec = O.store.all().filter(function (r) { return r.kind === "photo"; })[0];
+    if (!rec || !O.photo.put(rec.id, P.data)) {
+      if (rec) O.store.remove(rec);
+      O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return;
+    }
+    P = { kind: P.kind, data: "", rel: "", note: "", busy: false };
+    O.toast("Η φωτογραφία καταχωρήθηκε");
+    home(); sync(false);
+  }
+
   /* ---------- σκανάρισμα QR ---------- */
   function vScan() {
     return BACK + "<h1>Σκανάρισμα QR</h1><p class=\"sub\">Στόχευσε το QR του τιμολογίου. Καταχωρείται μόνο του μόλις διαβαστεί.</p>" +
@@ -403,7 +453,7 @@
     setDock("");
     var html = {
       home: vHome, login: vLogin, loading: vLoading, client: vClient, clients: vClients, clientform: vClientForm, newclient: vNewClient, cat: vCat,
-      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vScan,
+      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vScan, docs: vDocs, photo: vPhoto,
       history: function () { return O.hist.html(hset, confirmKey); }
     }[v]();
     var y = window.scrollY;
@@ -425,6 +475,7 @@
     if (v === "clientform") { setDock(formDock("saveCF")); updateCF(); }
     if (v === "newclient") setDock(formDock("saveClient"));
     if (v === "note") { setDock(formDock("saveNote")); updateSave(); }
+    if (v === "photo") { setDock(formDock("savePhoto")); updatePhoto(); }
     if (v === "scan") {
       lastBad = "";
       O.scan.start($("cam"), onScan, function (code) { var m = $("camMsg"); m.textContent = SCAN_ERR[code] || SCAN_ERR.nocamera; m.hidden = false; });
@@ -492,6 +543,15 @@
     else if (t.dataset.hno) { confirmKey = ""; render("history", true); }
     else if (t.dataset.hyes) delRec(t.dataset.hyes);
     else if (a === "scan") go("scan");
+    else if (a === "docs") go("docs");
+    else if (a === "photo") { P = { kind: "partner", data: "", rel: "", note: "", busy: false }; go("photo"); }
+    else if (a === "ph-cam") $("phCam").click();
+    else if (a === "ph-gal") $("phGal").click();
+    else if (t.dataset.pk) {
+      P.kind = t.dataset.pk;
+      Array.prototype.forEach.call(t.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === t)); });
+    }
+    else if (t.id === "savePhoto") savePhoto();
     else if (a === "refresh") { O.toast("Ενημέρωση…"); refresh(false); }
     else if (a === "token") { loginMsg = ""; render("login"); }
     else if (a === "edit-client") { S.edit = true; go("client"); }
@@ -538,6 +598,7 @@
   document.addEventListener("input", function (e) {
     var el = e.target;
     if (el.id === "s") drawPick();
+    else if (el.id === "phNote") P.note = el.value;
     else if (el.id === "pq") { S.q = el.value; drawProducts(); }
     else if (el.id === "note" || el.classList.contains("ef")) updateSave();
     else if (el.classList.contains("cf")) { if ($("saveCF")) updateCF(); else if ($("saveClient")) $("saveClient").disabled = !O.newClient.ok(); }
@@ -546,6 +607,11 @@
       if (clean !== el.value) el.value = clean;
       setQty(el.dataset.i, parseInt(clean, 10) || 0);
     }
+  });
+  document.addEventListener("change", function (e) {
+    var el = e.target;
+    if (el.id === "phCam" || el.id === "phGal") { onPhotoFile(el.files && el.files[0]); el.value = ""; }
+    else if (el.id === "phRel") P.rel = el.value;
   });
   document.addEventListener("focusin", function (e) { if (e.target.dataset && e.target.dataset.i) e.target.select(); });
   document.addEventListener("focusout", function (e) { if (e.target.dataset && e.target.dataset.i) e.target.value = S.qty[e.target.dataset.i] || 0; });

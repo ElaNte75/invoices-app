@@ -115,3 +115,4 @@ textarea.field { padding: 12px 14px; min-height: 140px; resize: vertical; }
 .send:disabled { background: var(--line); color: var(--muted); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 130px; background: var(--ink); color: var(--bg); padding: 12px 20px; border-radius: 30px; font-weight: 600; max-width: 90%; text-align: center; z-index: 30; }
 @media (prefers-reduced-motion: no-preference) { .prow, .opt, .seg button { transition: background .15s, border-color .15s; } }
+.thumb { display: block; max-width: 100%; max-height: 160px; margin: 8px 0; border-radius: 8px; border: 1px solid var(--line); }

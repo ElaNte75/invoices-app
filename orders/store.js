@@ -51,6 +51,7 @@
       return write(list);
     },
     remove: function (rec) {
+      if (rec.kind === "photo" && O.photo) O.photo.del(rec.id);
       return write(read().filter(function (r) { return !(r.t === rec.t && r.id === rec.id); }));
     },
     update: function (id, patch) {

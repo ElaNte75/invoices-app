@@ -15,6 +15,7 @@
     if (r.kind === "clientEdit") return "επεξεργασία πελάτη " + r.client;
     if (r.kind === "edit") return "επεξεργασία καταλόγου για " + r.product;
     if (r.kind === "qr") return "QR τιμολογίου";
+    if (r.kind === "photo") return "φωτογραφία (" + O.photoKindLabel(r.pk) + ")";
     return "πληροφορία για " + r.product;
   };
   function payload(r) {
@@ -37,6 +38,11 @@
       p.note = r.text || "";
     } else if (r.kind === "qr") {
       p.url = r.url;
+    } else if (r.kind === "photo") {
+      p.photoKind = r.pk;
+      p.note = r.text || "";
+      if (r.rel) p.related = r.rel;
+      p.image = { type: "image/jpeg", data: O.photo.base64(r.id) };
     } else {
       p.product = { id: r.productId || "", name: r.product };
       p.text = r.text;
@@ -45,6 +51,7 @@
   }
   /* Επιστρέφει {sha} (το νέο sha του αρχείου) ή {passed:true} αν το αρχείο έχει φύγει από το inbox */
   function put(r) {
+    if (r.kind === "photo" && !O.photo.base64(r.id)) return Promise.resolve({ passed: false, lost: true });
     var body = {
       message: (r.sha ? "Από την εφαρμογή παραγγελιών (επεξεργασία): " : "Από την εφαρμογή παραγγελιών: ") + O.what(r),
       content: b64(JSON.stringify(payload(r), null, 2) + "\n"),
@@ -73,7 +80,9 @@
     return O.store.pending().reduce(function (p, r) {
       return p.then(function () {
         return put(r).then(function (x) {
+          if (r.kind === "photo" && x.lost) { O.store.remove(r); return; } /* η φωτογραφία δεν υπάρχει πια στο κινητό */
           O.store.update(r.id, { sent: true, sentAt: new Date().toISOString(), sha: x.sha || r.sha, passed: !!x.passed });
+          if (r.kind === "photo") O.photo.del(r.id);
           if (!x.passed) sent++;
         });
       });

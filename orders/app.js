@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 30;
+  var VERSION = 31;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -57,7 +57,7 @@
       '</div><button class="small" data-act="sync">Αποστολή τώρα</button>' : "";
     return '<h1>Παραγγελίες</h1>' + pend + '<div class="stack home">' +
       '<button class="big primary" data-act="new-order">Νέα παραγγελία</button>' +
-      '<button class="big" data-act="docs">Παραστατικά<small>σκανάρισμα QR ή φωτογραφία</small></button>' +
+      '<button class="big" data-act="docs">Νέο παραστατικό<small>καταχώρηση με QR ή φωτογραφία</small></button>' +
       '<button class="big" data-act="clients">Επεξεργασία πελατών<small>στοιχεία πελάτη, νέος πελάτης</small></button>' +
       '<button class="big" data-act="new-info">Επεξεργασία καταλόγου<small>πάχος, υλικό, διαστάσεις, περιγραφή</small></button>' +
       '<button class="big" data-act="history">Ιστορικό παραγγελιών<small>' + n + " εγγραφές</small></button></div>" +
@@ -85,7 +85,8 @@
     else if (kind === "cl") { top = histBtn("hist-clients"); add = '<button class="small add" data-act="new-client">+ Νέος πελάτης</button>'; }
     else if (kind === "cat" && mode === "info") top = histBtn("hist-catalog");
     else if (kind === "qrc") top = histBtn("hist-qr");
-    return top + "<h1>" + title + "</h1>" + add + '<input class="search" id="s" type="search" placeholder="' + placeholder + '" aria-label="' + placeholder + '" autocomplete="off"><div class="list" id="list"></div>';
+    return top + "<h1>" + title + "</h1>" + add + '<input class="search" id="s" type="search" placeholder="' + placeholder + '" aria-label="' + placeholder + '" autocomplete="off"><div class="list" id="list"></div>' +
+      (kind === "qrc" ? '<button class="qrbtn" id="qrGo" disabled aria-label="Άνοιγμα κάμερας για QR">QR<small>κάμερα</small></button>' : "");
   }
   function drawPick() {
     var raw = $("s").value.trim(), q = norm(raw), qrc = pick.kind === "qrc";
@@ -375,9 +376,9 @@
 
   /* ---------- παραστατικά: QR ή φωτογραφία ---------- */
   function vDocs() {
-    return BACK + "<h1>Παραστατικά</h1>" + '<div class="stack">' +
-      '<button class="big" data-act="scan">Σκανάρισμα QR<small>τιμολόγιο με την κάμερα</small></button>' +
-      '<button class="big" data-act="photo">Φωτογραφία<small>δελτίο, παραστατικό, σφραγίδα</small></button></div>';
+    return BACK + '<div class="stack docs">' +
+      '<button class="big" data-act="scan">Καταχώρηση με QR<small>τιμολόγιο με την κάμερα</small></button>' +
+      '<button class="big" data-act="photo">Φωτογραφία<small>παραστατικό ή οτιδήποτε άλλο</small></button></div>';
   }
   var P = { kind: "document", data: "", rel: "", note: "", busy: false };
   function relOptions() {
@@ -426,7 +427,7 @@
 
   /* ---------- σκανάρισμα QR: πρώτα ο πελάτης, μετά η κάμερα ---------- */
   var Q = { client: "", name: "" };
-  function vQrPick() { return vPick("Σκανάρισμα QR", "Γράψε πελάτη για αναζήτηση", clientItems(), "qrc"); }
+  function vQrPick() { return vPick("Καταχώρηση με QR", "Γράψε πελάτη για αναζήτηση", clientItems(), "qrc"); }
   function updateQr() { var b = $("qrGo"); if (b) b.disabled = !Q.client; }
   function selectQ(id, name) { Q.client = id; Q.name = name; drawPick(); updateQr(); }
   function newQrClient() {
@@ -484,7 +485,7 @@
     app.innerHTML = html;
     window.scrollTo(0, keepScroll ? y : 0);
     if (v === "client" || v === "clients" || v === "cat" || v === "scan") drawPick();
-    if (v === "scan") { setDock('<div class="dock2"><button class="send" id="qrGo" disabled>QR</button></div>'); updateQr(); }
+    if (v === "scan") updateQr();
     if (v === "products") {
       drawProducts();
       if (mode === "order") {

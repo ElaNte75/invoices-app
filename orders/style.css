@@ -123,3 +123,8 @@ h1.tight { margin: 6px 0 4px; }
 .pform #phPrev { width: 100%; max-height: 220px; object-fit: contain; margin: 10px 0 0; background: var(--surface); }
 .opt.sel { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .opt.sel small { color: inherit; opacity: .8; }
+.topbar .back { flex: 0 0 150px; padding: 0; }
+.stack.docs { margin-top: 16px; }
+.qrbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 168px; height: 168px; margin: 36px auto 24px; border: 0; border-radius: 28px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-size: 48px; font-weight: 700; letter-spacing: .04em; }
+.qrbtn small { font-family: var(--font-body); font-size: 15px; font-weight: 400; letter-spacing: 0; }
+.qrbtn:disabled { background: var(--line); color: var(--muted); }

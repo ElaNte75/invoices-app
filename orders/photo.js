@@ -3,8 +3,8 @@
 (function (O) {
   var PREFIX = "orders_photo_", MAX_SIDE = 1800, MAX_B64 = 850000;
   O.photoKinds = [
-    { k: "partner", label: "Δελτίο συνεργάτη" },
     { k: "customer", label: "Παραστατικό πελάτη" },
+    { k: "partner", label: "Δελτίο συνεργάτη" },
     { k: "stamp", label: "Σφραγίδα πρακτορείου" },
     { k: "other", label: "Άλλο" }
   ];

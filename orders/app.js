@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 26;
+  var VERSION = 27;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -370,7 +370,7 @@
       '<button class="big" data-act="scan">Σκανάρισμα QR<small>τιμολόγιο με την κάμερα</small></button>' +
       '<button class="big" data-act="photo">Φωτογραφία<small>δελτίο, παραστατικό, σφραγίδα</small></button></div>';
   }
-  var P = { kind: "customer", data: "", rel: "", note: "", busy: false };
+  var P = { kind: "document", data: "", rel: "", note: "", busy: false };
   function relOptions() {
     var o = '<option value="">Κανένα</option>';
     O.store.all().filter(function (r) { return (r.kind === "order" || r.kind === "qr") && !r.passed; }).forEach(function (r) {
@@ -389,7 +389,7 @@
       '<input type="file" accept="image/*" capture="environment" id="phCam" hidden><input type="file" accept="image/*" id="phGal" hidden>' +
       '<img class="thumb" id="phPrev" alt="" ' + (P.data ? 'src="' + P.data + '"' : "hidden") + ">" +
       '<div class="label">Σχετίζεται με (προαιρετικά)</div><select class="field" id="phRel" aria-label="Σχετίζεται με">' + relOptions() + "</select>" +
-      '<div class="label">Σχόλιο (προαιρετικά)</div><textarea class="field" id="phNote" placeholder="Γράψε εδώ…" aria-label="Σχόλιο">' + esc(P.note) + "</textarea>";
+      '<div class="label">Περιγραφή (προαιρετικά)</div><textarea class="field" id="phNote" placeholder="Γράψε εδώ τι είναι…" aria-label="Περιγραφή">' + esc(P.note) + "</textarea>";
   }
   function updatePhoto() { var b = $("savePhoto"); if (b) b.disabled = !P.data || P.busy; }
   function onPhotoFile(file) {
@@ -546,7 +546,7 @@
     else if (t.dataset.hyes) delRec(t.dataset.hyes);
     else if (a === "scan") go("scan");
     else if (a === "docs") go("docs");
-    else if (a === "photo") { P = { kind: "customer", data: "", rel: "", note: "", busy: false }; go("photo"); }
+    else if (a === "photo") { P = { kind: "document", data: "", rel: "", note: "", busy: false }; go("photo"); }
     else if (a === "ph-cam") $("phCam").click();
     else if (a === "ph-gal") $("phGal").click();
     else if (t.dataset.pk) {

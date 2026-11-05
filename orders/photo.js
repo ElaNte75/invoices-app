@@ -3,12 +3,12 @@
 (function (O) {
   var PREFIX = "orders_photo_", MAX_SIDE = 1800, MAX_B64 = 850000;
   O.photoKinds = [
-    { k: "customer", label: "Παραστατικό πελάτη" },
-    { k: "partner", label: "Δελτίο συνεργάτη" },
-    { k: "stamp", label: "Σφραγίδα πρακτορείου" },
+    { k: "document", label: "Παραστατικό" },
     { k: "other", label: "Άλλο" }
   ];
-  O.photoKindLabel = function (k) { var f = O.photoKinds.filter(function (x) { return x.k === k; })[0]; return f ? f.label : "Φωτογραφία"; };
+  /* Παλιότερες φωτογραφίες (πριν την έκδοση 27) είχαν περισσότερες κατηγορίες */
+  var OLD = { customer: "Παραστατικό πελάτη", partner: "Δελτίο συνεργάτη", stamp: "Σφραγίδα πρακτορείου" };
+  O.photoKindLabel = function (k) { var f = O.photoKinds.filter(function (x) { return x.k === k; })[0]; return f ? f.label : OLD[k] || "Φωτογραφία"; };
 
   function load(file) {
     if (window.createImageBitmap) {

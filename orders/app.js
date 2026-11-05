@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 31;
+  var VERSION = 32;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -81,7 +81,7 @@
   function vPick(title, placeholder, items, kind) {
     pick = { items: items, kind: kind };
     var top = BACK, add = "";
-    if (kind === "client") top = '<div class="topbar">' + BACK + '<button class="back" data-act="new-client">+ Νέος πελάτης</button></div>';
+    if (kind === "client") top = '<div class="topbar">' + BACK + '<button class="back" data-act="new-client">Νέος πελάτης</button></div>';
     else if (kind === "cl") { top = histBtn("hist-clients"); add = '<button class="small add" data-act="new-client">+ Νέος πελάτης</button>'; }
     else if (kind === "cat" && mode === "info") top = histBtn("hist-catalog");
     else if (kind === "qrc") top = histBtn("hist-qr");
@@ -376,7 +376,7 @@
 
   /* ---------- παραστατικά: QR ή φωτογραφία ---------- */
   function vDocs() {
-    return BACK + '<div class="stack docs">' +
+    return BACK + '<div class="stack home docs">' +
       '<button class="big" data-act="scan">Καταχώρηση με QR<small>τιμολόγιο με την κάμερα</small></button>' +
       '<button class="big" data-act="photo">Φωτογραφία<small>παραστατικό ή οτιδήποτε άλλο</small></button></div>';
   }
@@ -392,7 +392,7 @@
     return o;
   }
   function vPhoto() {
-    return histBtn("hist-photos") + '<h1 class="tight">Φωτογραφία</h1><div class="pform">' +
+    return histBtn("hist-photos") + '<h1>Φωτογραφία</h1><div class="pform">' +
       '<div class="seg">' + O.photoKinds.map(function (k) {
         return '<button data-pk="' + k.k + '" aria-pressed="' + (P.kind === k.k) + '">' + k.label + "</button>";
       }).join("") + "</div>" +

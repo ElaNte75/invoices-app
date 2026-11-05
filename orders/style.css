@@ -59,7 +59,7 @@ h1 { font-family: var(--font-display); font-size: 30px; margin: 14px 0 12px; let
 .small { min-height: 52px; padding: 0 16px; border: 2px solid var(--line); background: var(--surface); border-radius: 10px; font-size: 16px; }
 
 /* πλοήγηση και επιλογές */
-.back { min-height: 56px; margin-top: 12px; padding: 0 20px; border: 2px solid var(--line); background: var(--surface); border-radius: 12px; font-family: var(--font-display); font-size: 22px; font-weight: 600; }
+.back { min-height: 56px; margin-top: 12px; width: 162px; padding: 0; border: 2px solid var(--line); background: var(--surface); border-radius: 12px; font-family: var(--font-display); font-size: 20px; font-weight: 600; white-space: nowrap; }
 .topbar { display: flex; gap: 10px; justify-content: space-between; align-items: center; }
 .topbar .back:last-child { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .search, .field { width: 100%; min-height: 56px; border: 2px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; padding: 0 14px; }
@@ -116,14 +116,12 @@ textarea.field { padding: 12px 14px; min-height: 140px; resize: vertical; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 130px; background: var(--ink); color: var(--bg); padding: 12px 20px; border-radius: 30px; font-weight: 600; max-width: 90%; text-align: center; z-index: 30; }
 @media (prefers-reduced-motion: no-preference) { .prow, .opt, .seg button { transition: background .15s, border-color .15s; } }
 .thumb { display: block; max-width: 100%; max-height: 160px; margin: 8px 0; border-radius: 8px; border: 1px solid var(--line); }
-h1.tight { margin: 6px 0 4px; }
 .pform .seg { margin-top: 8px; }
 .pform .label { margin: 12px 0 6px; }
 .pform textarea.field { min-height: 96px; }
 .pform #phPrev { width: 100%; max-height: 220px; object-fit: contain; margin: 10px 0 0; background: var(--surface); }
 .opt.sel { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .opt.sel small { color: inherit; opacity: .8; }
-.topbar .back { flex: 0 0 150px; padding: 0; }
 .stack.docs { margin-top: 16px; }
 .qrbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 168px; height: 168px; margin: 36px auto 24px; border: 0; border-radius: 28px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-size: 48px; font-weight: 700; letter-spacing: .04em; }
 .qrbtn small { font-family: var(--font-body); font-size: 15px; font-weight: 400; letter-spacing: 0; }

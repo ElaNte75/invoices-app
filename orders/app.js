@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 23;
+  var VERSION = 24;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -366,7 +366,7 @@
 
   /* ---------- παραστατικά: QR ή φωτογραφία ---------- */
   function vDocs() {
-    return histBtn("hist-docs") + "<h1>Παραστατικά</h1>" + '<div class="stack">' +
+    return BACK + "<h1>Παραστατικά</h1>" + '<div class="stack">' +
       '<button class="big" data-act="scan">Σκανάρισμα QR<small>τιμολόγιο με την κάμερα</small></button>' +
       '<button class="big" data-act="photo">Φωτογραφία<small>δελτίο, παραστατικό, σφραγίδα</small></button></div>';
   }
@@ -381,7 +381,7 @@
     return o;
   }
   function vPhoto() {
-    return histBtn("hist-docs") + "<h1>Φωτογραφία</h1>" +
+    return histBtn("hist-photos") + "<h1>Φωτογραφία</h1>" +
       '<div class="seg">' + O.photoKinds.map(function (k) {
         return '<button data-pk="' + k.k + '" aria-pressed="' + (P.kind === k.k) + '">' + k.label + "</button>";
       }).join("") + "</div>" +
@@ -416,7 +416,7 @@
 
   /* ---------- σκανάρισμα QR ---------- */
   function vScan() {
-    return histBtn("hist-docs") + "<h1>Σκανάρισμα QR</h1><p class=\"sub\">Στόχευσε το QR του τιμολογίου. Καταχωρείται μόνο του μόλις διαβαστεί.</p>" +
+    return histBtn("hist-qr") + "<h1>Σκανάρισμα QR</h1><p class=\"sub\">Στόχευσε το QR του τιμολογίου. Καταχωρείται μόνο του μόλις διαβαστεί.</p>" +
       '<video class="cam" id="cam" playsinline muted></video><div class="msg" id="camMsg" hidden></div>';
   }
   var SCAN_ERR = {
@@ -536,7 +536,8 @@
     else if (a === "history") openHist("orders");
     else if (a === "hist-catalog") openHist("catalog");
     else if (a === "hist-clients") openHist("clients");
-    else if (a === "hist-docs") openHist("docs");
+    else if (a === "hist-qr") openHist("qr");
+    else if (a === "hist-photos") openHist("photos");
     else if (a === "clients") { S = fresh(); go("clients"); }
     else if (a === "edit-add") go("cat");
     else if (t.dataset.hedit) editRec(t.dataset.hedit);

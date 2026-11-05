@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 29;
+  var VERSION = 30;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -89,11 +89,18 @@
   }
   function drawPick() {
     var raw = $("s").value.trim(), q = norm(raw), qrc = pick.kind === "qrc";
-    var html = pick.items.filter(function (i) { return norm(i.label + " " + i.sub).indexOf(q) > -1; }).map(function (i) {
+    var found = pick.items.filter(function (i) { return norm(i.label + " " + i.sub).indexOf(q) > -1; }), more = 0;
+    if (qrc) {
+      /* Στο QR δεν δείχνουμε ολόκληρη τη λίστα: μόνο όσα ταιριάζουν με ό,τι γράφεις (το πολύ 6) */
+      if (!raw) found = found.filter(function (i) { return i.k === Q.client; });
+      else if (found.length > 6) { more = found.length - 6; found = found.slice(0, 6); }
+    }
+    var html = found.map(function (i) {
       return '<button class="opt' + (qrc && Q.client === i.k ? " sel" : "") + '" data-pick="' + esc(i.k) + '">' + esc(i.label) + (i.sub ? "<small>" + esc(i.sub) + "</small>" : "") + "</button>";
     }).join("");
     if (!html && qrc && raw) html = '<button class="opt" data-newq="1">Νέος πελάτης: «' + esc(raw) + '»<small>πάτα για καταχώρηση ως νέος πελάτης</small></button>';
-    $("list").innerHTML = html || '<p class="empty">Δεν βρέθηκε.</p>';
+    if (more) html += '<p class="empty">… και άλλοι ' + more + ". Γράψε κι άλλα γράμματα.</p>";
+    $("list").innerHTML = html || (qrc && !raw ? '<p class="empty">Γράψε το όνομα του πελάτη.</p>' : '<p class="empty">Δεν βρέθηκε.</p>');
   }
   /* Πόσες φορές έχει παραγγελθεί κάθε πελάτης και κάθε προϊόν (από το ιστορικό του κινητού) */
   function usage() {

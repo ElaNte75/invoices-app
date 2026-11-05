@@ -2,7 +2,8 @@
    Κάθε εγγραφή έχει Επεξεργασία και Διαγραφή όσο δεν έχει περαστεί στη βάση. */
 (function (O) {
   var SETS = {
-    orders: { title: "Ιστορικό παραγγελιών", kinds: ["order", "qr", "photo"] },
+    orders: { title: "Ιστορικό παραγγελιών", kinds: ["order"] },
+    docs: { title: "Ιστορικό παραστατικών", kinds: ["qr", "photo"] },
     catalog: { title: "Ιστορικό επεξεργασίας καταλόγου", kinds: ["edit", "info"] },
     clients: { title: "Ιστορικό πελατών", kinds: ["client", "clientEdit"] }
   };

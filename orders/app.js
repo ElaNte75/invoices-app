@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 28;
+  var VERSION = 29;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -84,13 +84,15 @@
     if (kind === "client") top = '<div class="topbar">' + BACK + '<button class="back" data-act="new-client">+ Νέος πελάτης</button></div>';
     else if (kind === "cl") { top = histBtn("hist-clients"); add = '<button class="small add" data-act="new-client">+ Νέος πελάτης</button>'; }
     else if (kind === "cat" && mode === "info") top = histBtn("hist-catalog");
+    else if (kind === "qrc") top = histBtn("hist-qr");
     return top + "<h1>" + title + "</h1>" + add + '<input class="search" id="s" type="search" placeholder="' + placeholder + '" aria-label="' + placeholder + '" autocomplete="off"><div class="list" id="list"></div>';
   }
   function drawPick() {
-    var q = norm($("s").value.trim());
+    var raw = $("s").value.trim(), q = norm(raw), qrc = pick.kind === "qrc";
     var html = pick.items.filter(function (i) { return norm(i.label + " " + i.sub).indexOf(q) > -1; }).map(function (i) {
-      return '<button class="opt" data-pick="' + esc(i.k) + '">' + esc(i.label) + (i.sub ? "<small>" + esc(i.sub) + "</small>" : "") + "</button>";
+      return '<button class="opt' + (qrc && Q.client === i.k ? " sel" : "") + '" data-pick="' + esc(i.k) + '">' + esc(i.label) + (i.sub ? "<small>" + esc(i.sub) + "</small>" : "") + "</button>";
     }).join("");
+    if (!html && qrc && raw) html = '<button class="opt" data-newq="1">Νέος πελάτης: «' + esc(raw) + '»<small>πάτα για καταχώρηση ως νέος πελάτης</small></button>';
     $("list").innerHTML = html || '<p class="empty">Δεν βρέθηκε.</p>';
   }
   /* Πόσες φορές έχει παραγγελθεί κάθε πελάτης και κάθε προϊόν (από το ιστορικό του κινητού) */
@@ -374,8 +376,9 @@
   function relOptions() {
     var o = '<option value="">Κανένα</option>';
     O.store.all().filter(function (r) { return (r.kind === "order" || r.kind === "qr") && !r.passed; }).forEach(function (r) {
-      var n = r.kind === "order" ? "Παραγγελία " + (r.client || "") : "Τιμολόγιο QR";
-      var d = r.t ? new Date(r.t).toLocaleDateString("el-GR", { day: "numeric", month: "numeric" }) : "";
+      var n = (r.kind === "order" ? "Παραγγελία " : "QR ") + (r.client || "");
+      var dt = r.t ? new Date(r.t) : null, today = dt && dt.toDateString() === new Date().toDateString();
+      var d = dt ? (today ? "" : dt.toLocaleDateString("el-GR", { day: "numeric", month: "numeric" }) + " ") + dt.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" }) : "";
       o += '<option value="' + esc(O.fileName(r)) + '"' + (P.rel === O.fileName(r) ? " selected" : "") + ">" + esc(n + (d ? " · " + d : "")) + "</option>";
     });
     return o;
@@ -414,9 +417,23 @@
     home(); sync(false);
   }
 
-  /* ---------- σκανάρισμα QR ---------- */
+  /* ---------- σκανάρισμα QR: πρώτα ο πελάτης, μετά η κάμερα ---------- */
+  var Q = { client: "", name: "" };
+  function vQrPick() { return vPick("Σκανάρισμα QR", "Γράψε πελάτη για αναζήτηση", clientItems(), "qrc"); }
+  function updateQr() { var b = $("qrGo"); if (b) b.disabled = !Q.client; }
+  function selectQ(id, name) { Q.client = id; Q.name = name; drawPick(); updateQr(); }
+  function newQrClient() {
+    var name = $("s").value.trim().replace(/\s+/g, " ");
+    if (!name) return;
+    if (!O.store.add({ kind: "client", client: { shortName: name, name: name }, text: "" })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+    var rec = O.store.all().filter(function (r) { return r.kind === "client"; })[0];
+    pick.items = clientItems();
+    selectQ("new-" + rec.id, name);
+    O.toast("Νέος πελάτης: " + name);
+    sync(false);
+  }
   function vScan() {
-    return histBtn("hist-qr") + "<h1>Σκανάρισμα QR</h1><p class=\"sub\">Στόχευσε το QR του τιμολογίου. Καταχωρείται μόνο του μόλις διαβαστεί.</p>" +
+    return BACK + "<h1>" + esc(Q.name) + "</h1><p class=\"sub\">Στόχευσε το QR του τιμολογίου. Καταχωρείται μόνο του μόλις διαβαστεί.</p>" +
       '<video class="cam" id="cam" playsinline muted></video><div class="msg" id="camMsg" hidden></div>';
   }
   var SCAN_ERR = {
@@ -435,7 +452,7 @@
     if (O.store.all().some(function (r) { return r.kind === "qr" && r.url === text; })) {
       O.toast("Αυτό το τιμολόγιο το έχεις ήδη σκανάρει."); home(); return true;
     }
-    if (!O.store.add({ kind: "qr", url: text })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); home(); return true; }
+    if (!O.store.add({ kind: "qr", url: text, client: Q.name, clientId: Q.client })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); home(); return true; }
     O.toast("Καταχωρήθηκε το τιμολόγιο");
     home(); sync(false);
     return true;
@@ -453,13 +470,14 @@
     setDock("");
     var html = {
       home: vHome, login: vLogin, loading: vLoading, client: vClient, clients: vClients, clientform: vClientForm, newclient: vNewClient, cat: vCat,
-      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vScan, docs: vDocs, photo: vPhoto,
+      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vQrPick, scancam: vScan, docs: vDocs, photo: vPhoto,
       history: function () { return O.hist.html(hset, confirmKey); }
     }[v]();
     var y = window.scrollY;
     app.innerHTML = html;
     window.scrollTo(0, keepScroll ? y : 0);
-    if (v === "client" || v === "clients" || v === "cat") drawPick();
+    if (v === "client" || v === "clients" || v === "cat" || v === "scan") drawPick();
+    if (v === "scan") { setDock('<div class="dock2"><button class="send" id="qrGo" disabled>QR</button></div>'); updateQr(); }
     if (v === "products") {
       drawProducts();
       if (mode === "order") {
@@ -476,7 +494,7 @@
     if (v === "newclient") setDock(formDock("saveClient"));
     if (v === "note") { setDock(formDock("saveNote")); updateSave(); }
     if (v === "photo") { setDock(formDock("savePhoto")); updatePhoto(); }
-    if (v === "scan") {
+    if (v === "scancam") {
       lastBad = "";
       O.scan.start($("cam"), onScan, function (code) { var m = $("camMsg"); m.textContent = SCAN_ERR[code] || SCAN_ERR.nocamera; m.hidden = false; });
     }
@@ -544,7 +562,9 @@
     else if (t.dataset.hdel) { confirmKey = t.dataset.hdel; render("history", true); }
     else if (t.dataset.hno) { confirmKey = ""; render("history", true); }
     else if (t.dataset.hyes) delRec(t.dataset.hyes);
-    else if (a === "scan") go("scan");
+    else if (a === "scan") { Q = { client: "", name: "" }; go("scan"); }
+    else if (t.id === "qrGo") { if (Q.client) go("scancam"); }
+    else if (t.dataset.newq) newQrClient();
     else if (a === "docs") go("docs");
     else if (a === "photo") { P = { kind: "document", data: "", rel: "", note: "", busy: false }; go("photo"); }
     else if (a === "ph-cam") $("phCam").click();
@@ -560,6 +580,7 @@
     else if (a === "edit-cat") { S.edit = true; go("cat"); }
     else if (t.dataset.pick !== undefined) {
       if (pick.kind === "cl") { openClientForm(t.dataset.pick); return; }
+      if (pick.kind === "qrc") { var qi = pick.items.filter(function (i) { return i.k === t.dataset.pick; })[0]; selectQ(t.dataset.pick, qi ? qi.label : ""); return; }
       if (pick.kind === "client") S.client = t.dataset.pick;
       else { S.cat = t.dataset.pick; S.mat = ""; S.q = ""; }
       if (S.edit) { S.edit = false; history.back(); }

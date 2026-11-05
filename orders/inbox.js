@@ -34,7 +34,7 @@
           else if (rec.kind === "client") rec.client = j.customer || {};
           else if (rec.kind === "clientEdit") { rec.client = j.client.name; rec.clientId = j.client.id; rec.changes = j.changes; }
           else if (rec.kind === "edit" || rec.kind === "info") { rec.product = j.product.name; rec.productId = j.product.id; rec.changes = j.changes; }
-          else if (rec.kind === "qr") rec.url = j.url;
+          else if (rec.kind === "qr") { rec.url = j.url; if (j.client) { rec.client = j.client.name; rec.clientId = j.client.id; } }
           else if (rec.kind === "photo") { rec.pk = j.photoKind; rec.rel = j.related || ""; }
           if (rec.t && O.fileName(rec) === e.name && O.store.insert(rec)) any = true;
         }).catch(function () {});

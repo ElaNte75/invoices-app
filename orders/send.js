@@ -14,7 +14,7 @@
     if (r.kind === "client") return "νέος πελάτης " + (r.client.shortName || "");
     if (r.kind === "clientEdit") return "επεξεργασία πελάτη " + r.client;
     if (r.kind === "edit") return "επεξεργασία καταλόγου για " + r.product;
-    if (r.kind === "qr") return "QR τιμολογίου";
+    if (r.kind === "qr") return "QR τιμολογίου" + (r.client ? " (" + r.client + ")" : "");
     if (r.kind === "photo") return "φωτογραφία (" + O.photoKindLabel(r.pk) + ")";
     return "πληροφορία για " + r.product;
   };
@@ -38,6 +38,7 @@
       p.note = r.text || "";
     } else if (r.kind === "qr") {
       p.url = r.url;
+      if (r.client) p.client = { id: r.clientId || "", name: r.client };
     } else if (r.kind === "photo") {
       p.photoKind = r.pk;
       p.note = r.text || "";

@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 27;
+  var VERSION = 28;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -381,15 +381,15 @@
     return o;
   }
   function vPhoto() {
-    return histBtn("hist-photos") + "<h1>Φωτογραφία</h1>" +
+    return histBtn("hist-photos") + '<h1 class="tight">Φωτογραφία</h1><div class="pform">' +
       '<div class="seg">' + O.photoKinds.map(function (k) {
         return '<button data-pk="' + k.k + '" aria-pressed="' + (P.kind === k.k) + '">' + k.label + "</button>";
       }).join("") + "</div>" +
-      '<div class="row2" style="margin-top:12px"><button class="small" data-act="ph-cam">Τράβηγμα φωτογραφίας</button><button class="small" data-act="ph-gal">Από τη συλλογή</button></div>' +
+      '<div class="seg"><button data-act="ph-cam">Κάμερα</button><button data-act="ph-gal">Συλλογή</button></div>' +
       '<input type="file" accept="image/*" capture="environment" id="phCam" hidden><input type="file" accept="image/*" id="phGal" hidden>' +
       '<img class="thumb" id="phPrev" alt="" ' + (P.data ? 'src="' + P.data + '"' : "hidden") + ">" +
       '<div class="label">Σχετίζεται με (προαιρετικά)</div><select class="field" id="phRel" aria-label="Σχετίζεται με">' + relOptions() + "</select>" +
-      '<div class="label">Περιγραφή (προαιρετικά)</div><textarea class="field" id="phNote" placeholder="Γράψε εδώ τι είναι…" aria-label="Περιγραφή">' + esc(P.note) + "</textarea>";
+      '<div class="label">Περιγραφή (προαιρετικά)</div><textarea class="field" id="phNote" placeholder="Γράψε εδώ τι είναι…" aria-label="Περιγραφή">' + esc(P.note) + "</textarea></div>";
   }
   function updatePhoto() { var b = $("savePhoto"); if (b) b.disabled = !P.data || P.busy; }
   function onPhotoFile(file) {

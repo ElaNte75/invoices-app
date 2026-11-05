@@ -116,3 +116,8 @@ textarea.field { padding: 12px 14px; min-height: 140px; resize: vertical; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 130px; background: var(--ink); color: var(--bg); padding: 12px 20px; border-radius: 30px; font-weight: 600; max-width: 90%; text-align: center; z-index: 30; }
 @media (prefers-reduced-motion: no-preference) { .prow, .opt, .seg button { transition: background .15s, border-color .15s; } }
 .thumb { display: block; max-width: 100%; max-height: 160px; margin: 8px 0; border-radius: 8px; border: 1px solid var(--line); }
+h1.tight { margin: 6px 0 4px; }
+.pform .seg { margin-top: 8px; }
+.pform .label { margin: 12px 0 6px; }
+.pform textarea.field { min-height: 96px; }
+.pform #phPrev { width: 100%; max-height: 220px; object-fit: contain; margin: 10px 0 0; background: var(--surface); }

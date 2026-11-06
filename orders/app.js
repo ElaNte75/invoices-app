@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 34;
+  var VERSION = 35;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -196,7 +196,42 @@
     return '<button class="crumb" data-act="edit-client"><span><small>Πελάτης</small>' + name + "</span></button>";
   }
   function itemName(id) { var p = prodById(id); return S.names[id] || (p ? p.name : id); }
-  function orderItems() { return Object.keys(S.qty).map(function (id) { return { id: id, name: itemName(id), qty: S.qty[id] }; }); }
+  /* Γραμμή που δεν είναι στον κατάλογο (νέα ειδική κατασκευή) πηγαίνει χωρίς id και με special: true */
+  function orderItems() {
+    return Object.keys(S.qty).map(function (id) {
+      var it = { id: id, name: itemName(id), qty: S.qty[id] };
+      if (!prodById(id)) { it.id = ""; it.special = true; }
+      return it;
+    });
+  }
+  var SPECIAL = "Ειδική κατασκευή";
+  function addSpecial() {
+    var text = S.q.trim().replace(/\s+/g, " ");
+    if (!text) return;
+    var id = "sp-" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+    S.names[id] = text; S.qty[id] = 1; S.q = "";
+    var pq = $("pq"); if (pq) pq.value = "";
+    drawProducts(); updateSend();
+  }
+  /* Αναζήτηση: κάθε λέξη πρέπει να υπάρχει· οι αριθμοί/διαστάσεις που γράφονται πρώτα θεωρούνται πρώτη διάσταση
+     (30 → πρώτα 30×…, μετά 300×…, και στο τέλος όσα έχουν το 30 αλλού, π.χ. 60×30) */
+  function dimNorm(s) { return String(s).toLowerCase().replace(/,/g, ".").replace(/[xX*]/g, "×").replace(/\s+/g, ""); }
+  function firstDim(name) {
+    var m = /[Φφ]?\d+(?:[.,]\d+)?(?:\s*[×xX*]\s*\d+(?:[.,]\d+)?)*/.exec(name);
+    return m ? dimNorm(m[0]).replace(/^φ/, "") : "";
+  }
+  function searchRank(p, q) {
+    var toks = norm(q).split(/\s+/).filter(Boolean), hay = norm(p.name + " " + p.mat + " " + p.feats.join(" ")), hayD = dimNorm(p.name), dim = firstDim(p.name), rank = 2, seen = false;
+    for (var i = 0; i < toks.length; i++) {
+      var t = toks[i];
+      if (/^φ?\d[\d.,×xX*]*$/.test(t)) {
+        t = dimNorm(t).replace(/^φ/, "");
+        if (hayD.indexOf(t) < 0) return -1;
+        if (!seen) { seen = true; rank = dim.indexOf(t) === 0 ? (dim.split("×")[0] === t.split("×")[0] ? 0 : 1) : 2; }
+      } else if (hay.indexOf(t) < 0) return -1;
+    }
+    return rank;
+  }
   function catProducts() { return O.data.products.filter(function (p) { return p.cat === S.cat; }); }
   function vProducts() {
     var all = catProducts(), mats = [];
@@ -215,13 +250,25 @@
       '<div class="list" id="plist"></div>';
   }
   function drawProducts() {
-    var q = norm(S.q.trim()), u = usage().prods;
-    var list = catProducts().filter(function (p) {
-      return (!S.mat || p.mat === S.mat) && norm(p.name + " " + p.mat + " " + p.feats.join(" ")).indexOf(q) > -1;
-    }).map(function (p, i) { return { p: p, i: i }; }).sort(function (a, b) {
-      return ((u[b.p.id] || 0) - (u[a.p.id] || 0)) || (a.i - b.i);
-    }).map(function (x) { return x.p; });
-    $("plist").innerHTML = list.map(function (p) {
+    var u = usage().prods, rq = S.q.trim();
+    var list = catProducts().filter(function (p) { return !S.mat || p.mat === S.mat; }).map(function (p, i) { return { p: p, i: i, r: searchRank(p, rq) }; })
+      .filter(function (x) { return x.r > -1; }).sort(function (a, b) {
+        return (a.r - b.r) || ((u[b.p.id] || 0) - (u[a.p.id] || 0)) || (a.i - b.i);
+      }).map(function (x) { return x.p; });
+    var sp = "";
+    if (mode === "order" && S.cat === SPECIAL) {
+      /* νέες ειδικές κατασκευές αυτής της παραγγελίας + κουμπί προσθήκης */
+      Object.keys(S.names).filter(function (id) { return !prodById(id); }).forEach(function (id) {
+        var n = S.qty[id] || 0;
+        sp += '<div class="prow' + (n ? " has" : "") + '" id="r' + id + '"><div class="pname">' + esc(S.names[id]) + '</div><div class="tags"><span class="tag">νέα ειδική κατασκευή</span></div>' +
+          '<div class="step"><button data-m="' + id + '" aria-label="Λιγότερο">−</button>' +
+          '<input id="q' + id + '" data-i="' + id + '" type="text" inputmode="numeric" pattern="[0-9]*" value="' + n + '" aria-label="Ποσότητα">' +
+          '<button class="plus" data-p="' + id + '" aria-label="Περισσότερο">+</button><span class="unit">τμχ</span></div></div>';
+      });
+      sp += rq ? '<button class="prow addsp" data-addsp="1"><div class="pname">+ Νέα ειδική κατασκευή</div><div class="tags">«' + esc(rq) + '»</div></button>'
+        : '<p class="empty">Γράψε την περιγραφή και πάτα «+ Νέα ειδική κατασκευή».</p>';
+    }
+    $("plist").innerHTML = sp + list.map(function (p) {
       if (mode === "info") {
         return '<button class="prow" data-prod="' + p.id + '"><div class="pname">' + esc(p.name) + '</div><div class="tags">' + tagsOf(p) + "</div></button>";
       }
@@ -230,7 +277,7 @@
         '<div class="step"><button data-m="' + p.id + '" aria-label="Λιγότερο">−</button>' +
         '<input id="q' + p.id + '" data-i="' + p.id + '" type="text" inputmode="numeric" pattern="[0-9]*" value="' + n + '" aria-label="Ποσότητα">' +
         '<button class="plus" data-p="' + p.id + '" aria-label="Περισσότερο">+</button><span class="unit">τμχ</span></div></div>';
-    }).join("") || '<p class="empty">Δεν βρέθηκε προϊόν.</p>';
+    }).join("") || (sp ? "" : '<p class="empty">Δεν βρέθηκε προϊόν.</p>');
   }
   function total() { return Object.keys(S.qty).reduce(function (s, k) { return s + S.qty[k]; }, 0); }
   function updateSend() {
@@ -289,7 +336,7 @@
     home(); sync(false);
   }
   /* Νέα παραγγελία: αν ο ίδιος πελάτης έχει ήδη παραγγελία που δεν έχει περαστεί στη βάση, τα προϊόντα προστίθενται σε εκείνη */
-  function itemsOf(r) { return r.items.map(function (i) { return Array.isArray(i) ? { id: "", name: i[0], qty: i[1] } : { id: i.id || "", name: i.name, qty: i.qty }; }); }
+  function itemsOf(r) { return r.items.map(function (i) { return Array.isArray(i) ? { id: "", name: i[0], qty: i[1] } : { id: i.id || "", name: i.name, qty: i.qty, special: i.special }; }); }
   /* Αν ο ίδιος πελάτης έχει πάνω από μία παραγγελία που δεν έχει περαστεί, ενοποιούνται στην παλαιότερη.
      Τα id που έχουν ήδη μπει στο merged δεν προστίθενται ξανά, ώστε να μη διπλασιαστούν ποσότητες αν διακοπεί στη μέση. */
   function consolidate() {
@@ -606,6 +653,7 @@
       else go(pick.kind === "client" ? "cat" : "products");
     }
     else if (t.dataset.mat !== undefined) { S.mat = t.dataset.mat; render("products"); }
+    else if (t.dataset.addsp) addSpecial();
     else if (t.dataset.p) { var p = t.dataset.p; setQty(p, (S.qty[p] || 0) + 1); $("q" + p).value = S.qty[p] || 0; }
     else if (t.dataset.m) { var m = t.dataset.m; setQty(m, (S.qty[m] || 0) - 1); $("q" + m).value = S.qty[m] || 0; }
     else if (t.dataset.prod) { S.prod = t.dataset.prod; go("note"); }

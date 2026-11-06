@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 35;
+  var VERSION = 36;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -428,9 +428,10 @@
       '<button class="big" data-act="photo">Φωτογραφία<small>παραστατικό ή οτιδήποτε άλλο</small></button></div>';
   }
   var P = { kind: "document", data: "", rel: "", note: "", busy: false };
+  function relItems() { return O.store.all().filter(function (r) { return (r.kind === "order" || r.kind === "qr") && !r.passed; }); }
   function relOptions() {
-    var o = '<option value="">Κανένα</option>';
-    O.store.all().filter(function (r) { return (r.kind === "order" || r.kind === "qr") && !r.passed; }).forEach(function (r) {
+    var o = '<option value=""' + (P.rel ? "" : " selected") + ' disabled>Επίλεξε παραστατικό…</option>';
+    relItems().forEach(function (r) {
       var n = (r.kind === "order" ? "Παραγγελία " : "QR ") + (r.client || "");
       var dt = r.t ? new Date(r.t) : null, today = dt && dt.toDateString() === new Date().toDateString();
       var d = dt ? (today ? "" : dt.toLocaleDateString("el-GR", { day: "numeric", month: "numeric" }) + " ") + dt.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" }) : "";
@@ -439,22 +440,25 @@
     return o;
   }
   function vPhoto() {
+    var off = P.rel ? "" : " disabled";
     return histBtn("hist-photos") + '<h1>Φωτογραφία</h1><div class="pform">' +
-      '<div class="seg">' + O.photoKinds.map(function (k) {
-        return '<button data-pk="' + k.k + '" aria-pressed="' + (P.kind === k.k) + '">' + k.label + "</button>";
-      }).join("") + "</div>" +
-      '<div class="seg"><button data-act="ph-cam">Κάμερα</button><button data-act="ph-gal">Συλλογή</button></div>' +
+      '<div class="label">Σε ποιο παραστατικό ανήκει;</div>' +
+      (relItems().length ? '<select class="field" id="phRel" aria-label="Παραστατικό">' + relOptions() + "</select>"
+        : '<p class="sub">Δεν υπάρχει παραστατικό στο ιστορικό που να μην έχει περαστεί. Κάνε πρώτα παραγγελία ή καταχώρηση με QR.</p>') +
+      '<div class="seg" id="phBtns"><button data-act="ph-cam"' + off + '>Κάμερα</button><button data-act="ph-gal"' + off + '>Συλλογή</button></div>' +
       '<input type="file" accept="image/*" id="phGal" hidden>' +
       '<img class="thumb" id="phPrev" alt="" ' + (P.data ? 'src="' + P.data + '"' : "hidden") + ">" +
-      '<div class="label">Σχετίζεται με (προαιρετικά)</div><select class="field" id="phRel" aria-label="Σχετίζεται με">' + relOptions() + "</select>" +
-      '<div class="label">Περιγραφή (προαιρετικά)</div><textarea class="field" id="phNote" placeholder="Γράψε εδώ τι είναι…" aria-label="Περιγραφή">' + esc(P.note) + "</textarea></div>";
+      '<div class="label">Σημείωμα (προαιρετικά)</div><textarea class="field" id="phNote" placeholder="Γράψε εδώ τι είναι…" aria-label="Περιγραφή">' + esc(P.note) + "</textarea></div>";
   }
   function vPhotoCam() {
     return BACK + '<h1>Φωτογραφία</h1><p class="sub">Στόχευσε ολόκληρο το παραστατικό και πάτα «Λήψη».</p>' +
       '<video class="cam" id="pcam" playsinline muted></video><div class="msg" id="camMsg" hidden></div>' +
       '<button class="snap" data-act="ph-snap" aria-label="Λήψη φωτογραφίας"></button>';
   }
-  function updatePhoto() { var b = $("savePhoto"); if (b) b.disabled = !P.data || P.busy; }
+  function updatePhoto() {
+    var b = $("savePhoto"); if (b) b.disabled = !P.rel || !P.data || P.busy;
+    var g = $("phBtns"); if (g) Array.prototype.forEach.call(g.children, function (x) { x.disabled = !P.rel; });
+  }
   function onPhotoFile(file) {
     if (!file) return;
     P.busy = true; updatePhoto(); O.toast("Επεξεργασία φωτογραφίας…");
@@ -465,7 +469,7 @@
     }).catch(function () { P.busy = false; updatePhoto(); O.toast("Η φωτογραφία δεν διαβάστηκε."); });
   }
   function savePhoto() {
-    if (!P.data) return;
+    if (!P.data || !P.rel) return;
     if (!O.store.add({ kind: "photo", pk: P.kind, text: P.note.trim(), rel: P.rel })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
     var rec = O.store.all().filter(function (r) { return r.kind === "photo"; })[0];
     if (!rec || !O.photo.put(rec.id, P.data)) {
@@ -628,17 +632,13 @@
     else if (t.dataset.newq) newQrClient();
     else if (a === "docs") go("docs");
     else if (a === "photo") { P = { kind: "document", data: "", rel: "", note: "", busy: false }; go("photo"); }
-    else if (a === "ph-cam") go("photocam");
+    else if (a === "ph-cam") { if (P.rel) go("photocam"); }
     else if (a === "ph-snap") {
       var d = O.photo.snap($("pcam"));
       if (!d) { O.toast("Η κάμερα δεν είναι έτοιμη. Δοκίμασε ξανά."); return; }
       P.data = d; history.back();
     }
-    else if (a === "ph-gal") $("phGal").click();
-    else if (t.dataset.pk) {
-      P.kind = t.dataset.pk;
-      Array.prototype.forEach.call(t.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === t)); });
-    }
+    else if (a === "ph-gal") { if (P.rel) $("phGal").click(); }
     else if (t.id === "savePhoto") savePhoto();
     else if (a === "refresh") { O.toast("Ενημέρωση…"); refresh(false); }
     else if (a === "token") { loginMsg = ""; render("login"); }
@@ -701,7 +701,7 @@
   document.addEventListener("change", function (e) {
     var el = e.target;
     if (el.id === "phGal") { onPhotoFile(el.files && el.files[0]); el.value = ""; }
-    else if (el.id === "phRel") P.rel = el.value;
+    else if (el.id === "phRel") { P.rel = el.value; updatePhoto(); }
   });
   document.addEventListener("focusin", function (e) { if (e.target.dataset && e.target.dataset.i) e.target.select(); });
   document.addEventListener("focusout", function (e) { if (e.target.dataset && e.target.dataset.i) e.target.value = S.qty[e.target.dataset.i] || 0; });

@@ -8,7 +8,9 @@
     { k: "address", label: "Διεύθυνση" },
     { k: "phone", label: "Τηλέφωνο", mode: "tel" },
     { k: "doy", label: "ΔΟΥ" },
-    { k: "profession", label: "Επάγγελμα" }
+    { k: "profession", label: "Επάγγελμα" },
+    { k: "website", label: "Ιστοσελίδα", mode: "url" },
+    { k: "instructions", label: "Σημείωση / οδηγίες (μόνιμη)", area: true }
   ];
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function val(k) { var el = document.getElementById("c-" + k); return el ? el.value.trim() : ""; }
@@ -20,9 +22,11 @@
     html: function (vals, note, noRequired) {
       vals = vals || {};
       return FIELDS.map(function (f) {
-        return '<div class="label">' + (noRequired ? f.label.replace(" *", "") : f.label) + '</div><input class="field cf" id="c-' + f.k + '" type="text" autocomplete="off"' +
+        var lab = '<div class="label">' + (noRequired ? f.label.replace(" *", "") : f.label) + "</div>";
+        if (f.area) return lab + '<textarea class="field cf" id="c-' + f.k + '" placeholder="π.χ. ξεχωριστό μαγαζί από άλλον πελάτη, να μη συγχωνεύεται" aria-label="' + f.label + '">' + esc(vals[f.k] || "") + "</textarea>";
+        return lab + '<input class="field cf" id="c-' + f.k + '" type="text" autocomplete="off"' +
           (f.mode ? ' inputmode="' + f.mode + '"' : "") + ' value="' + esc(vals[f.k] || "") + '">';
-      }).join("") + '<div class="label">Σχόλιο</div><textarea class="field cf" id="c-note" placeholder="Ό,τι άλλο ξέρεις…" aria-label="Σχόλιο">' + esc(note || "") + "</textarea>";
+      }).join("") + '<div class="label">Σχόλιο για την καταχώρηση</div><textarea class="field cf" id="c-note" placeholder="Μήνυμα μόνο για αυτή την αλλαγή…" aria-label="Σχόλιο">' + esc(note || "") + "</textarea>";
     },
     ok: function () { return !!val("shortName"); },
     values: function () {

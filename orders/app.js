@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 33;
+  var VERSION = 34;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -120,7 +120,7 @@
     var u = usage().clients;
     var list = O.data.clients.slice().sort(function (a, b) { return (u[b.id] || 0) - (u[a.id] || 0); });
     return newClients().concat(list).map(function (c) {
-      return { k: c.id, label: c.name, sub: c.isNew ? "Νέος · περιμένει καταχώρηση" : c.city };
+      return { k: c.id, label: c.name, sub: c.isNew ? "Νέος · περιμένει καταχώρηση" : (c.city || "") + (c.ins ? (c.city ? "  ·  " : "") + "⚠ " + c.ins.replace(/\s+/g, " ") : "") };
     });
   }
   function vClient() { return vPick("Πελάτης", "Γράψε για αναζήτηση", clientItems(), "client"); }
@@ -128,7 +128,7 @@
 
   /* φόρμα πελάτη για επεξεργασία: cf = { kind: "client" | "clientEdit", rec, c, base, vals, note } */
   function baseOf(c) {
-    return { shortName: c.short, name: c.full, afm: c.afm, city: c.city, address: c.address, phone: c.phone, doy: c.doy, profession: c.prof };
+    return { shortName: c.short, name: c.full, afm: c.afm, city: c.city, address: c.address, phone: c.phone, doy: c.doy, profession: c.prof, website: c.web, instructions: c.ins };
   }
   function openClientForm(id) {
     var r, c;

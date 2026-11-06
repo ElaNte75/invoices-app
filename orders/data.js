@@ -2,7 +2,7 @@
    Κατεβαίνουν μόνο τα αρχεία που άλλαξαν από την τελευταία φορά. */
 (function (O) {
   var TOKEN_KEY = "orders_token";
-  var CACHE_KEY = "orders_data_v5";
+  var CACHE_KEY = "orders_data_v6";
   var REPO = 'repository(owner:"ElaNte75", name:"Invoices")';
   var TREES = "query { " + REPO + " {" +
     ' c: object(expression:"main:data/customers") { ... on Tree { entries { name oid } } }' +
@@ -45,7 +45,7 @@
   function slimClient(j, f) {
     return {
       id: f.id, o: f.oid, name: j.shortName || j.name || f.id, city: j.city || "", afm: j.afm || "",
-      short: j.shortName || "", full: j.name || "", address: j.address || "", phone: j.phone || "", doy: j.doy || "", prof: j.profession || ""
+      short: j.shortName || "", full: j.name || "", address: j.address || "", phone: j.phone || "", doy: j.doy || "", prof: j.profession || "", web: j.website || "", ins: j.instructions || ""
     };
   }
   function slimProduct(j, f) {

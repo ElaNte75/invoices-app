@@ -127,3 +127,4 @@ textarea.field { padding: 12px 14px; min-height: 140px; resize: vertical; }
 .qrbtn small { font-family: var(--font-body); font-size: 15px; font-weight: 400; letter-spacing: 0; }
 .qrbtn:disabled { background: var(--line); color: var(--muted); }
 .snap { display: block; width: 84px; height: 84px; margin: 22px auto 24px; border-radius: 50%; border: 6px solid var(--surface); background: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
+.opt small { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

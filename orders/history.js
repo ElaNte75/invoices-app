@@ -59,7 +59,7 @@
       kind = "Φωτογραφία"; title = O.photoKindLabel(r.pk);
       inner = (O.photo.get(r.id) ? '<img class="thumb" alt="" src="' + O.photo.get(r.id) + '">' : "") +
         (r.text ? "<div>" + esc(r.text) + "</div>" : "") +
-        (rel ? '<div class="sub">Σχετίζεται με: ' + esc(rel.kind === "order" ? "παραγγελία " + rel.client : "τιμολόγιο QR") + "</div>" : "");
+        (rel ? '<div class="sub">Σχετίζεται με: ' + esc((rel.kind === "order" ? "παραγγελία " : "QR ") + (rel.client || "")) + "</div>" : "");
     } else if (r.kind === "client") {
       var cf = r.client || {};
       kind = "Νέος πελάτης"; title = cf.shortName || "";

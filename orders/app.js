@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 32;
+  var VERSION = 33;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -397,10 +397,15 @@
         return '<button data-pk="' + k.k + '" aria-pressed="' + (P.kind === k.k) + '">' + k.label + "</button>";
       }).join("") + "</div>" +
       '<div class="seg"><button data-act="ph-cam">Κάμερα</button><button data-act="ph-gal">Συλλογή</button></div>' +
-      '<input type="file" accept="image/*" capture="environment" id="phCam" hidden><input type="file" accept="image/*" id="phGal" hidden>' +
+      '<input type="file" accept="image/*" id="phGal" hidden>' +
       '<img class="thumb" id="phPrev" alt="" ' + (P.data ? 'src="' + P.data + '"' : "hidden") + ">" +
       '<div class="label">Σχετίζεται με (προαιρετικά)</div><select class="field" id="phRel" aria-label="Σχετίζεται με">' + relOptions() + "</select>" +
       '<div class="label">Περιγραφή (προαιρετικά)</div><textarea class="field" id="phNote" placeholder="Γράψε εδώ τι είναι…" aria-label="Περιγραφή">' + esc(P.note) + "</textarea></div>";
+  }
+  function vPhotoCam() {
+    return BACK + '<h1>Φωτογραφία</h1><p class="sub">Στόχευσε ολόκληρο το παραστατικό και πάτα «Λήψη».</p>' +
+      '<video class="cam" id="pcam" playsinline muted></video><div class="msg" id="camMsg" hidden></div>' +
+      '<button class="snap" data-act="ph-snap" aria-label="Λήψη φωτογραφίας"></button>';
   }
   function updatePhoto() { var b = $("savePhoto"); if (b) b.disabled = !P.data || P.busy; }
   function onPhotoFile(file) {
@@ -474,11 +479,11 @@
   /* ---------- εμφάνιση ---------- */
   function render(v, keepScroll) {
     view = v;
-    O.scan.stop();
+    O.scan.stop(); O.photo.camStop();
     setDock("");
     var html = {
       home: vHome, login: vLogin, loading: vLoading, client: vClient, clients: vClients, clientform: vClientForm, newclient: vNewClient, cat: vCat,
-      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vQrPick, scancam: vScan, docs: vDocs, photo: vPhoto,
+      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vQrPick, scancam: vScan, docs: vDocs, photo: vPhoto, photocam: vPhotoCam,
       history: function () { return O.hist.html(hset, confirmKey); }
     }[v]();
     var y = window.scrollY;
@@ -502,6 +507,7 @@
     if (v === "newclient") setDock(formDock("saveClient"));
     if (v === "note") { setDock(formDock("saveNote")); updateSave(); }
     if (v === "photo") { setDock(formDock("savePhoto")); updatePhoto(); }
+    if (v === "photocam") O.photo.camStart($("pcam"), function (code) { var m = $("camMsg"); m.textContent = SCAN_ERR[code] || SCAN_ERR.nocamera; m.hidden = false; });
     if (v === "scancam") {
       lastBad = "";
       O.scan.start($("cam"), onScan, function (code) { var m = $("camMsg"); m.textContent = SCAN_ERR[code] || SCAN_ERR.nocamera; m.hidden = false; });
@@ -575,7 +581,12 @@
     else if (t.dataset.newq) newQrClient();
     else if (a === "docs") go("docs");
     else if (a === "photo") { P = { kind: "document", data: "", rel: "", note: "", busy: false }; go("photo"); }
-    else if (a === "ph-cam") $("phCam").click();
+    else if (a === "ph-cam") go("photocam");
+    else if (a === "ph-snap") {
+      var d = O.photo.snap($("pcam"));
+      if (!d) { O.toast("Η κάμερα δεν είναι έτοιμη. Δοκίμασε ξανά."); return; }
+      P.data = d; history.back();
+    }
     else if (a === "ph-gal") $("phGal").click();
     else if (t.dataset.pk) {
       P.kind = t.dataset.pk;
@@ -641,7 +652,7 @@
   });
   document.addEventListener("change", function (e) {
     var el = e.target;
-    if (el.id === "phCam" || el.id === "phGal") { onPhotoFile(el.files && el.files[0]); el.value = ""; }
+    if (el.id === "phGal") { onPhotoFile(el.files && el.files[0]); el.value = ""; }
     else if (el.id === "phRel") P.rel = el.value;
   });
   document.addEventListener("focusin", function (e) { if (e.target.dataset && e.target.dataset.i) e.target.select(); });

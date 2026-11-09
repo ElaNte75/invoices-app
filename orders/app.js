@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 37;
+  var VERSION = 38;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -600,11 +600,11 @@
   window.addEventListener("popstate", function (e) {
     if (ignorePop) { ignorePop = false; return; }
     var d = e.state ? e.state.d : 0, target = e.state ? e.state.v : "home";
-    if (target === "home" && flowOpen()) {
+    if ((target === "home" || target === "client") && flowOpen()) {
       /* Η παραγγελία δεν έχει σταλεί: μένουμε στην ίδια οθόνη και ρωτάμε */
       ignorePop = true; history.go(depth - d);
       var n = Object.keys(S.qty).length, cn = S.clientName || (clientById(S.client) || {}).name || "";
-      dialog("Η παραγγελία δεν έχει σταλεί", "Έχεις " + n + (n === 1 ? " προϊόν" : " προϊόντα") + " στην παραγγελία" + (cn ? " του πελάτη " + cn : "") + ". Αν βγεις, δεν θα καταχωρηθεί.",
+      dialog("Η παραγγελία δεν έχει σταλεί", "Έχεις " + n + (n === 1 ? " προϊόν" : " προϊόντα") + " στην παραγγελία" + (cn ? " του πελάτη " + cn : "") + ". Αν γυρίσεις στους πελάτες, δεν θα καταχωρηθεί.",
         "Έξοδος", "Συνέχεια", function () { S = fresh(); clearDraft(); setTimeout(function () { history.go(-depth); }, 50); });
       return;
     }

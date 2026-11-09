@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 36;
+  var VERSION = 37;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -211,7 +211,7 @@
     var id = "sp-" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
     S.names[id] = text; S.qty[id] = 1; S.q = "";
     var pq = $("pq"); if (pq) pq.value = "";
-    drawProducts(); updateSend();
+    drawProducts(); updateSend(); saveDraft();
   }
   /* Αναζήτηση: κάθε λέξη πρέπει να υπάρχει· οι αριθμοί/διαστάσεις που γράφονται πρώτα θεωρούνται πρώτη διάσταση
      (30 → πρώτα 30×…, μετά 300×…, και στο τέλος όσα έχουν το 30 αλλού, π.χ. 60×30) */
@@ -287,9 +287,31 @@
     if ($("more")) $("more").disabled = !n;
     $("dnote").textContent = n ? k + (k === 1 ? " προϊόν" : " προϊόντα") + " στην παραγγελία · " + n + " τμχ" : "Δεν έχεις βάλει ακόμα ποσότητα";
   }
+  /* ---------- προστασία ανοιχτής παραγγελίας ---------- */
+  var DRAFT = "orders_draft_v1";
+  function flowOpen() { return mode === "order" && !S.editId && total() > 0 && (view === "client" || view === "cat" || view === "products"); }
+  function saveDraft() {
+    try {
+      if (mode === "order" && !S.editId && total() > 0) localStorage.setItem(DRAFT, JSON.stringify({ client: S.client, clientName: S.clientName, qty: S.qty, names: S.names, t: Date.now() }));
+      else if (mode === "order" && !S.editId) localStorage.removeItem(DRAFT);
+    } catch (e) {}
+  }
+  function readDraft() {
+    try { var d = JSON.parse(localStorage.getItem(DRAFT) || "null"); return d && d.qty && Object.keys(d.qty).length ? d : null; } catch (e) { return null; }
+  }
+  function clearDraft() { try { localStorage.removeItem(DRAFT); } catch (e) {} }
+  function dialog(title, text, okLabel, noLabel, onOk, onNo) {
+    var old = $("dlg"); if (old) old.remove();
+    var d = document.createElement("div"); d.className = "dlg"; d.id = "dlg"; d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");
+    d.innerHTML = '<div class="card"><h2>' + esc(title) + "</h2><p>" + esc(text) + '</p><div class="btns"><button class="more" id="dlgNo">' + esc(noLabel) + '</button><button class="send" id="dlgOk">' + esc(okLabel) + "</button></div></div>";
+    document.body.appendChild(d);
+    $("dlgOk").onclick = function () { d.remove(); onOk(); };
+    $("dlgNo").onclick = function () { d.remove(); if (onNo) onNo(); };
+  }
   function setQty(id, n) {
     n = Math.max(0, Math.min(99999, n || 0));
     if (n) S.qty[id] = n; else delete S.qty[id];
+    saveDraft();
     var r = $("r" + id); if (r) r.classList.toggle("has", n > 0);
     updateSend();
   }
@@ -383,7 +405,7 @@
       } else ok = O.store.add({ kind: "order", client: c ? c.name : "", clientId: cid, items: items });
       if (!ok) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); if (btn) btn.disabled = false; return; }
       O.toast((merged ? "Προστέθηκε στην παραγγελία: " : "Καταχωρήθηκε: ") + (c ? c.name : ""));
-      home(); sync(false);
+      clearDraft(); home(); sync(false);
     });
   }
 
@@ -574,9 +596,20 @@
     var d = depth;
     if (d > 0) history.go(-d); else render("home");
   }
+  var ignorePop = false;
   window.addEventListener("popstate", function (e) {
-    depth = e.state ? e.state.d : 0;
-    render(e.state ? e.state.v : "home");
+    if (ignorePop) { ignorePop = false; return; }
+    var d = e.state ? e.state.d : 0, target = e.state ? e.state.v : "home";
+    if (target === "home" && flowOpen()) {
+      /* Η παραγγελία δεν έχει σταλεί: μένουμε στην ίδια οθόνη και ρωτάμε */
+      ignorePop = true; history.go(depth - d);
+      var n = Object.keys(S.qty).length, cn = S.clientName || (clientById(S.client) || {}).name || "";
+      dialog("Η παραγγελία δεν έχει σταλεί", "Έχεις " + n + (n === 1 ? " προϊόν" : " προϊόντα") + " στην παραγγελία" + (cn ? " του πελάτη " + cn : "") + ". Αν βγεις, δεν θα καταχωρηθεί.",
+        "Έξοδος", "Συνέχεια", function () { S = fresh(); clearDraft(); setTimeout(function () { history.go(-depth); }, 50); });
+      return;
+    }
+    depth = d;
+    render(target);
   });
 
   /* ---------- δεδομένα ---------- */
@@ -614,7 +647,15 @@
     var t = e.target.closest("button"); if (!t) return;
     var a = t.dataset.act;
     if (a === "back") history.back();
-    else if (a === "new-order") { S = fresh(); mode = "order"; go("client"); }
+    else if (a === "new-order") {
+      var dr = readDraft();
+      if (dr) {
+        var nm = dr.clientName || (clientById(dr.client) || {}).name || "", cnt = Object.keys(dr.qty).length;
+        dialog("Έχεις ανοιχτή παραγγελία", (nm ? nm + " · " : "") + cnt + (cnt === 1 ? " προϊόν" : " προϊόντα") + ". Να τη συνεχίσεις;", "Συνέχεια", "Νέα (σβήσιμο)",
+          function () { S = fresh(); mode = "order"; S.client = dr.client; S.clientName = dr.clientName; S.qty = dr.qty; S.names = dr.names || {}; go("client"); go("cat"); },
+          function () { clearDraft(); S = fresh(); mode = "order"; go("client"); });
+      } else { S = fresh(); mode = "order"; go("client"); }
+    }
     else if (a === "new-info") { S = fresh(); mode = "info"; go("cat"); }
     else if (a === "history") openHist("orders");
     else if (a === "hist-catalog") openHist("catalog");

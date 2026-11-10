@@ -2,14 +2,14 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 38;
+  var VERSION = 39;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
   var pick = { items: [], kind: "" };
 
   /* editId: καταχώρηση του ιστορικού που επεξεργαζόμαστε· names: ονόματα προϊόντων παραγγελίας που επεξεργαζόμαστε */
-  function fresh() { return { client: null, clientName: "", cat: null, qty: {}, names: {}, mat: "", q: "", prod: null, edit: false, editId: "" }; }
+  function fresh() { return { client: null, clientName: "", cat: null, qty: {}, names: {}, spec: {}, mat: "", q: "", prod: null, edit: false, editId: "" }; }
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
   }
@@ -200,18 +200,46 @@
   function orderItems() {
     return Object.keys(S.qty).map(function (id) {
       var it = { id: id, name: itemName(id), qty: S.qty[id] };
-      if (!prodById(id)) { it.id = ""; it.special = true; }
+      if (!prodById(id)) {
+        it.id = ""; it.special = true;
+        var f = S.spec[id]; if (f) { it.desc = f.desc; it.dims = f.dims; it.thickness = f.th; }
+      }
       return it;
     });
   }
   var SPECIAL = "Ειδική κατασκευή";
-  function addSpecial() {
-    var text = S.q.trim().replace(/\s+/g, " ");
-    if (!text) return;
-    var id = "sp-" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
-    S.names[id] = text; S.qty[id] = 1; S.q = "";
-    var pq = $("pq"); if (pq) pq.value = "";
-    drawProducts(); updateSend(); saveDraft();
+  /* Ειδική κατασκευή: περιγραφή + διαστάσεις + πάχος → όνομα «περιγραφή διαστάσεις – πάχος χιλ.» */
+  function cleanDims(s) { return s.trim().replace(/\s*[xX*×]\s*/g, "×").replace(/\./g, ","); }
+  function cleanTh(s) { return s.replace(/χιλ\.?|χλστ\.?|mm/gi, "").trim().replace(/\./g, ","); }
+  function specName(f) { return f.desc + " " + f.dims + " – " + f.th + " χιλ."; }
+  function specDialog(id) {
+    var cur = id ? S.spec[id] || { desc: S.names[id] || "", dims: "", th: "" } : { desc: S.q.trim(), dims: "", th: "" };
+    var old = $("dlg"); if (old) old.remove();
+    var d = document.createElement("div"); d.className = "dlg top"; d.id = "dlg"; d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");
+    d.innerHTML = '<div class="card"><h2>' + (id ? "Αλλαγή ειδικής κατασκευής" : "Νέα ειδική κατασκευή") + "</h2>" +
+      '<div class="label">Περιγραφή</div><input class="field" id="spDesc" type="text" autocomplete="off" placeholder="π.χ. Ταψί αλουμινίου ορθογώνιο" value="' + esc(cur.desc) + '">' +
+      '<div class="label">Διαστάσεις</div><input class="field" id="spDims" type="text" autocomplete="off" placeholder="π.χ. 32×20×4 ή Φ22×3" value="' + esc(cur.dims) + '">' +
+      '<div class="label">Πάχος (χιλ.)</div><input class="field" id="spTh" type="text" inputmode="decimal" autocomplete="off" placeholder="π.χ. 1,5" value="' + esc(cur.th) + '">' +
+      '<p class="spprev" id="spPrev"></p>' +
+      '<div class="btns"><button class="more" id="dlgNo">Ακύρωση</button><button class="send" id="dlgOk" disabled>' + (id ? "Αποθήκευση" : "Προσθήκη") + "</button></div></div>";
+    document.body.appendChild(d);
+    function read() { return { desc: $("spDesc").value.trim().replace(/\s+/g, " "), dims: cleanDims($("spDims").value), th: cleanTh($("spTh").value) }; }
+    function upd() {
+      var f = read(), ok = !!(f.desc && f.dims && f.th);
+      $("dlgOk").disabled = !ok;
+      $("spPrev").textContent = ok ? "Θα καταχωρηθεί ως: " + specName(f) : "Συμπλήρωσε και τα τρία πεδία.";
+    }
+    d.addEventListener("input", upd); upd();
+    $("dlgNo").onclick = function () { d.remove(); };
+    $("dlgOk").onclick = function () {
+      var f = read(); if (!(f.desc && f.dims && f.th)) return;
+      if (!id) { id = "sp-" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36); S.qty[id] = 1; S.q = ""; var pq = $("pq"); if (pq) pq.value = ""; }
+      S.spec[id] = f; S.names[id] = specName(f);
+      d.remove();
+      if (view === "orderedit") render("orderedit"); else drawProducts();
+      updateSend(); saveDraft();
+    };
+    setTimeout(function () { var a = $("spDesc"), b = $("spDims"); if (a && b) (b.value ? a : b).focus(); }, 50);
   }
   /* Αναζήτηση: κάθε λέξη πρέπει να υπάρχει· οι αριθμοί/διαστάσεις που γράφονται πρώτα θεωρούνται πρώτη διάσταση
      (30 → πρώτα 30×…, μετά 300×…, και στο τέλος όσα έχουν το 30 αλλού, π.χ. 60×30) */
@@ -260,13 +288,12 @@
       /* νέες ειδικές κατασκευές αυτής της παραγγελίας + κουμπί προσθήκης */
       Object.keys(S.names).filter(function (id) { return !prodById(id); }).forEach(function (id) {
         var n = S.qty[id] || 0;
-        sp += '<div class="prow' + (n ? " has" : "") + '" id="r' + id + '"><div class="pname">' + esc(S.names[id]) + '</div><div class="tags"><span class="tag">νέα ειδική κατασκευή</span></div>' +
+        sp += '<div class="prow' + (n ? " has" : "") + '" id="r' + id + '"><div class="pname">' + esc(S.names[id]) + '</div><div class="tags"><span class="tag">νέα ειδική κατασκευή</span><button class="tagbtn" data-edsp="' + id + '">Αλλαγή</button></div>' +
           '<div class="step"><button data-m="' + id + '" aria-label="Λιγότερο">−</button>' +
           '<input id="q' + id + '" data-i="' + id + '" type="text" inputmode="numeric" pattern="[0-9]*" value="' + n + '" aria-label="Ποσότητα">' +
           '<button class="plus" data-p="' + id + '" aria-label="Περισσότερο">+</button><span class="unit">τμχ</span></div></div>';
       });
-      sp += rq ? '<button class="prow addsp" data-addsp="1"><div class="pname">+ Νέα ειδική κατασκευή</div><div class="tags">«' + esc(rq) + '»</div></button>'
-        : '<p class="empty">Γράψε την περιγραφή και πάτα «+ Νέα ειδική κατασκευή».</p>';
+      sp += '<button class="prow addsp" data-addsp="1"><div class="pname">+ Νέα ειδική κατασκευή</div><div class="tags">περιγραφή · διαστάσεις · πάχος</div></button>';
     }
     $("plist").innerHTML = sp + list.map(function (p) {
       if (mode === "info") {
@@ -292,7 +319,7 @@
   function flowOpen() { return mode === "order" && !S.editId && total() > 0 && (view === "client" || view === "cat" || view === "products"); }
   function saveDraft() {
     try {
-      if (mode === "order" && !S.editId && total() > 0) localStorage.setItem(DRAFT, JSON.stringify({ client: S.client, clientName: S.clientName, qty: S.qty, names: S.names, t: Date.now() }));
+      if (mode === "order" && !S.editId && total() > 0) localStorage.setItem(DRAFT, JSON.stringify({ client: S.client, clientName: S.clientName, qty: S.qty, names: S.names, spec: S.spec, t: Date.now() }));
       else if (mode === "order" && !S.editId) localStorage.removeItem(DRAFT);
     } catch (e) {}
   }
@@ -339,12 +366,15 @@
   function editOrderRec(r) {
     S = fresh(); mode = "order";
     S.client = r.clientId || ""; S.clientName = r.client; S.editId = r.id;
-    r.items.forEach(function (i, n) { var id = i.id || "x" + n; S.qty[id] = i.qty; S.names[id] = i.name; });
+    r.items.forEach(function (i, n) {
+      var id = i.id || "x" + n; S.qty[id] = i.qty; S.names[id] = i.name;
+      if (!prodById(id)) S.spec[id] = { desc: i.desc || i.name, dims: i.dims || "", th: i.thickness || "" };
+    });
     go("orderedit");
   }
   function vOrderEdit() {
     var rows = Object.keys(S.qty).map(function (id) {
-      return '<div class="prow has" id="r' + id + '"><div class="pname">' + esc(itemName(id)) + "</div>" +
+      return '<div class="prow has" id="r' + id + '"><div class="pname">' + esc(itemName(id)) + "</div>" + (prodById(id) ? "" : '<div class="tags"><span class="tag">ειδική κατασκευή</span><button class="tagbtn" data-edsp="' + id + '">Αλλαγή</button></div>') +
         '<div class="step"><button data-m="' + id + '" aria-label="Λιγότερο">−</button>' +
         '<input id="q' + id + '" data-i="' + id + '" type="text" inputmode="numeric" pattern="[0-9]*" value="' + S.qty[id] + '" aria-label="Ποσότητα">' +
         '<button class="plus" data-p="' + id + '" aria-label="Περισσότερο">+</button><span class="unit">τμχ</span></div></div>';
@@ -358,7 +388,7 @@
     home(); sync(false);
   }
   /* Νέα παραγγελία: αν ο ίδιος πελάτης έχει ήδη παραγγελία που δεν έχει περαστεί στη βάση, τα προϊόντα προστίθενται σε εκείνη */
-  function itemsOf(r) { return r.items.map(function (i) { return Array.isArray(i) ? { id: "", name: i[0], qty: i[1] } : { id: i.id || "", name: i.name, qty: i.qty, special: i.special }; }); }
+  function itemsOf(r) { return r.items.map(function (i) { return Array.isArray(i) ? { id: "", name: i[0], qty: i[1] } : { id: i.id || "", name: i.name, qty: i.qty, special: i.special, desc: i.desc, dims: i.dims, thickness: i.thickness }; }); }
   /* Αν ο ίδιος πελάτης έχει πάνω από μία παραγγελία που δεν έχει περαστεί, ενοποιούνται στην παλαιότερη.
      Τα id που έχουν ήδη μπει στο merged δεν προστίθενται ξανά, ώστε να μη διπλασιαστούν ποσότητες αν διακοπεί στη μέση. */
   function consolidate() {
@@ -652,7 +682,7 @@
       if (dr) {
         var nm = dr.clientName || (clientById(dr.client) || {}).name || "", cnt = Object.keys(dr.qty).length;
         dialog("Έχεις ανοιχτή παραγγελία", (nm ? nm + " · " : "") + cnt + (cnt === 1 ? " προϊόν" : " προϊόντα") + ". Να τη συνεχίσεις;", "Συνέχεια", "Νέα (σβήσιμο)",
-          function () { S = fresh(); mode = "order"; S.client = dr.client; S.clientName = dr.clientName; S.qty = dr.qty; S.names = dr.names || {}; go("client"); go("cat"); },
+          function () { S = fresh(); mode = "order"; S.client = dr.client; S.clientName = dr.clientName; S.qty = dr.qty; S.names = dr.names || {}; S.spec = dr.spec || {}; go("client"); go("cat"); },
           function () { clearDraft(); S = fresh(); mode = "order"; go("client"); });
       } else { S = fresh(); mode = "order"; go("client"); }
     }
@@ -694,7 +724,8 @@
       else go(pick.kind === "client" ? "cat" : "products");
     }
     else if (t.dataset.mat !== undefined) { S.mat = t.dataset.mat; render("products"); }
-    else if (t.dataset.addsp) addSpecial();
+    else if (t.dataset.addsp) specDialog(null);
+    else if (t.dataset.edsp) specDialog(t.dataset.edsp);
     else if (t.dataset.p) { var p = t.dataset.p; setQty(p, (S.qty[p] || 0) + 1); $("q" + p).value = S.qty[p] || 0; }
     else if (t.dataset.m) { var m = t.dataset.m; setQty(m, (S.qty[m] || 0) - 1); $("q" + m).value = S.qty[m] || 0; }
     else if (t.dataset.prod) { S.prod = t.dataset.prod; go("note"); }

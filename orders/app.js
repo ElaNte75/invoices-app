@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 39;
+  var VERSION = 40;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -202,7 +202,7 @@
       var it = { id: id, name: itemName(id), qty: S.qty[id] };
       if (!prodById(id)) {
         it.id = ""; it.special = true;
-        var f = S.spec[id]; if (f) { it.desc = f.desc; it.dims = f.dims; it.thickness = f.th; }
+        var f = S.spec[id]; if (f) { it.desc = f.desc; it.dims = f.dims; it.thickness = f.th; it.category = f.cat; it.material = f.mat; }
       }
       return it;
     });
@@ -213,26 +213,39 @@
   function cleanTh(s) { return s.replace(/χιλ\.?|χλστ\.?|mm/gi, "").trim().replace(/\./g, ","); }
   function specName(f) { return f.desc + " " + f.dims + " – " + f.th + " χιλ."; }
   function specDialog(id) {
-    var cur = id ? S.spec[id] || { desc: S.names[id] || "", dims: "", th: "" } : { desc: S.q.trim(), dims: "", th: "" };
+    var cur = id ? S.spec[id] || { desc: S.names[id] || "", dims: "", th: "", cat: "", mat: "" } : { desc: S.q.trim(), dims: "", th: "", cat: "", mat: "" };
+    var cats = [], mats = [];
+    O.data.products.forEach(function (p) {
+      if (p.cat && p.cat !== SPECIAL && cats.indexOf(p.cat) < 0) cats.push(p.cat);
+      if (p.mat && mats.indexOf(p.mat) < 0) mats.push(p.mat);
+    });
+    cats.sort(function (a, b) { return a.localeCompare(b, "el"); }); mats.sort(function (a, b) { return a.localeCompare(b, "el"); });
+    function opts(list, val) {
+      return '<option value=""' + (val ? "" : " selected") + ' disabled>Επίλεξε…</option><option value="Άλλο"' + (val === "Άλλο" ? " selected" : "") + ">Άλλο</option>" +
+        list.map(function (x) { return '<option value="' + esc(x) + '"' + (val === x ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("");
+    }
     var old = $("dlg"); if (old) old.remove();
     var d = document.createElement("div"); d.className = "dlg top"; d.id = "dlg"; d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");
     d.innerHTML = '<div class="card"><h2>' + (id ? "Αλλαγή ειδικής κατασκευής" : "Νέα ειδική κατασκευή") + "</h2>" +
+      '<div class="label">Κατηγορία</div><select class="field" id="spCat" aria-label="Κατηγορία">' + opts(cats, cur.cat) + "</select>" +
+      '<div class="label">Υλικό</div><select class="field" id="spMat" aria-label="Υλικό">' + opts(mats, cur.mat) + "</select>" +
       '<div class="label">Περιγραφή</div><input class="field" id="spDesc" type="text" autocomplete="off" placeholder="π.χ. Ταψί αλουμινίου ορθογώνιο" value="' + esc(cur.desc) + '">' +
       '<div class="label">Διαστάσεις</div><input class="field" id="spDims" type="text" autocomplete="off" placeholder="π.χ. 32×20×4 ή Φ22×3" value="' + esc(cur.dims) + '">' +
       '<div class="label">Πάχος (χιλ.)</div><input class="field" id="spTh" type="text" inputmode="decimal" autocomplete="off" placeholder="π.χ. 1,5" value="' + esc(cur.th) + '">' +
       '<p class="spprev" id="spPrev"></p>' +
       '<div class="btns"><button class="more" id="dlgNo">Ακύρωση</button><button class="send" id="dlgOk" disabled>' + (id ? "Αποθήκευση" : "Προσθήκη") + "</button></div></div>";
     document.body.appendChild(d);
-    function read() { return { desc: $("spDesc").value.trim().replace(/\s+/g, " "), dims: cleanDims($("spDims").value), th: cleanTh($("spTh").value) }; }
+    function read() { return { desc: $("spDesc").value.trim().replace(/\s+/g, " "), dims: cleanDims($("spDims").value), th: cleanTh($("spTh").value), cat: $("spCat").value, mat: $("spMat").value }; }
+    function full(f) { return !!(f.desc && f.dims && f.th && f.cat && f.mat); }
     function upd() {
-      var f = read(), ok = !!(f.desc && f.dims && f.th);
+      var f = read(), ok = full(f);
       $("dlgOk").disabled = !ok;
-      $("spPrev").textContent = ok ? "Θα καταχωρηθεί ως: " + specName(f) : "Συμπλήρωσε και τα τρία πεδία.";
+      $("spPrev").textContent = ok ? "Θα καταχωρηθεί ως: " + specName(f) + " (" + f.cat + ", " + f.mat + ")" : "Συμπλήρωσε όλα τα πεδία.";
     }
-    d.addEventListener("input", upd); upd();
+    d.addEventListener("input", upd); d.addEventListener("change", upd); upd();
     $("dlgNo").onclick = function () { d.remove(); };
     $("dlgOk").onclick = function () {
-      var f = read(); if (!(f.desc && f.dims && f.th)) return;
+      var f = read(); if (!full(f)) return;
       if (!id) { id = "sp-" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36); S.qty[id] = 1; S.q = ""; var pq = $("pq"); if (pq) pq.value = ""; }
       S.spec[id] = f; S.names[id] = specName(f);
       d.remove();
@@ -368,7 +381,7 @@
     S.client = r.clientId || ""; S.clientName = r.client; S.editId = r.id;
     r.items.forEach(function (i, n) {
       var id = i.id || "x" + n; S.qty[id] = i.qty; S.names[id] = i.name;
-      if (!prodById(id)) S.spec[id] = { desc: i.desc || i.name, dims: i.dims || "", th: i.thickness || "" };
+      if (!prodById(id)) S.spec[id] = { desc: i.desc || i.name, dims: i.dims || "", th: i.thickness || "", cat: i.category || "", mat: i.material || "" };
     });
     go("orderedit");
   }
@@ -388,7 +401,7 @@
     home(); sync(false);
   }
   /* Νέα παραγγελία: αν ο ίδιος πελάτης έχει ήδη παραγγελία που δεν έχει περαστεί στη βάση, τα προϊόντα προστίθενται σε εκείνη */
-  function itemsOf(r) { return r.items.map(function (i) { return Array.isArray(i) ? { id: "", name: i[0], qty: i[1] } : { id: i.id || "", name: i.name, qty: i.qty, special: i.special, desc: i.desc, dims: i.dims, thickness: i.thickness }; }); }
+  function itemsOf(r) { return r.items.map(function (i) { return Array.isArray(i) ? { id: "", name: i[0], qty: i[1] } : { id: i.id || "", name: i.name, qty: i.qty, special: i.special, desc: i.desc, dims: i.dims, thickness: i.thickness, category: i.category, material: i.material }; }); }
   /* Αν ο ίδιος πελάτης έχει πάνω από μία παραγγελία που δεν έχει περαστεί, ενοποιούνται στην παλαιότερη.
      Τα id που έχουν ήδη μπει στο merged δεν προστίθενται ξανά, ώστε να μη διπλασιαστούν ποσότητες αν διακοπεί στη μέση. */
   function consolidate() {

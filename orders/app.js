@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 40;
+  var VERSION = 41;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -211,7 +211,14 @@
   /* Ειδική κατασκευή: περιγραφή + διαστάσεις + πάχος → όνομα «περιγραφή διαστάσεις – πάχος χιλ.» */
   function cleanDims(s) { return s.trim().replace(/\s*[xX*×]\s*/g, "×").replace(/\./g, ","); }
   function cleanTh(s) { return s.replace(/χιλ\.?|χλστ\.?|mm/gi, "").trim().replace(/\./g, ","); }
-  function specName(f) { return f.desc + " " + f.dims + " – " + f.th + " χιλ."; }
+  /* Όνομα: κατηγορία + υλικό (γενική) + πρόσθετη περιγραφή + διαστάσεις – πάχος, π.χ. «Ταψί ορθογώνιο αλουμινίου 32×20×4 – 1,5 χιλ.» */
+  function matWord(m) {
+    if (!m || m === "Άλλο") return "";
+    return m.toLowerCase().replace(/^αλουμίνιο/, "αλουμινίου");
+  }
+  function specName(f) {
+    return [f.cat && f.cat !== "Άλλο" ? f.cat : "", matWord(f.mat), f.desc, f.dims].filter(Boolean).join(" ") + " – " + f.th + " χιλ.";
+  }
   function specDialog(id) {
     var cur = id ? S.spec[id] || { desc: S.names[id] || "", dims: "", th: "", cat: "", mat: "" } : { desc: S.q.trim(), dims: "", th: "", cat: "", mat: "" };
     var cats = [], mats = [];
@@ -227,21 +234,36 @@
     var old = $("dlg"); if (old) old.remove();
     var d = document.createElement("div"); d.className = "dlg top"; d.id = "dlg"; d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");
     d.innerHTML = '<div class="card"><h2>' + (id ? "Αλλαγή ειδικής κατασκευής" : "Νέα ειδική κατασκευή") + "</h2>" +
-      '<div class="label">Κατηγορία</div><select class="field" id="spCat" aria-label="Κατηγορία">' + opts(cats, cur.cat) + "</select>" +
+      '<div class="label">Κατηγορία</div><input class="field" id="spCatQ" type="text" autocomplete="off" placeholder="Γράψε για αναζήτηση… (π.χ. ταψί)" value="' + esc(cur.cat) + '" aria-label="Κατηγορία"><div class="sugg" id="spSugg"></div>' +
       '<div class="label">Υλικό</div><select class="field" id="spMat" aria-label="Υλικό">' + opts(mats, cur.mat) + "</select>" +
-      '<div class="label">Περιγραφή</div><input class="field" id="spDesc" type="text" autocomplete="off" placeholder="π.χ. Ταψί αλουμινίου ορθογώνιο" value="' + esc(cur.desc) + '">' +
       '<div class="label">Διαστάσεις</div><input class="field" id="spDims" type="text" autocomplete="off" placeholder="π.χ. 32×20×4 ή Φ22×3" value="' + esc(cur.dims) + '">' +
       '<div class="label">Πάχος (χιλ.)</div><input class="field" id="spTh" type="text" inputmode="decimal" autocomplete="off" placeholder="π.χ. 1,5" value="' + esc(cur.th) + '">' +
+      '<div class="label">Επιπλέον περιγραφή (προαιρετικά)</div><input class="field" id="spDesc" type="text" autocomplete="off" placeholder="π.χ. διάτρητο, με λαβή, ιδιαιτερότητες" value="' + esc(cur.desc) + '">' +
       '<p class="spprev" id="spPrev"></p>' +
       '<div class="btns"><button class="more" id="dlgNo">Ακύρωση</button><button class="send" id="dlgOk" disabled>' + (id ? "Αποθήκευση" : "Προσθήκη") + "</button></div></div>";
     document.body.appendChild(d);
-    function read() { return { desc: $("spDesc").value.trim().replace(/\s+/g, " "), dims: cleanDims($("spDims").value), th: cleanTh($("spTh").value), cat: $("spCat").value, mat: $("spMat").value }; }
-    function full(f) { return !!(f.desc && f.dims && f.th && f.cat && f.mat); }
+    var chosen = cur.cat;
+    function suggest() {
+      var v = $("spCatQ").value.trim(), box = $("spSugg");
+      if (chosen && v === chosen) { box.innerHTML = ""; return; }
+      var q = norm(v), list = ["Άλλο"].concat(cats).filter(function (c) { return !q || norm(c).indexOf(q) > -1; });
+      var more = list.length > 6 ? list.length - 6 : 0; list = list.slice(0, 6);
+      box.innerHTML = list.map(function (c) { return '<button class="opt" data-cat="' + esc(c) + '">' + esc(c) + "</button>"; }).join("") +
+        (more ? '<p class="empty">… και άλλες ' + more + ". Γράψε κι άλλα γράμματα.</p>" : "");
+    }
+    function read() { return { desc: $("spDesc").value.trim().replace(/\s+/g, " "), dims: cleanDims($("spDims").value), th: cleanTh($("spTh").value), cat: chosen, mat: $("spMat").value }; }
+    function full(f) { return !!(f.dims && f.th && f.cat && f.mat && (f.cat !== "Άλλο" || f.desc)); }
     function upd() {
       var f = read(), ok = full(f);
       $("dlgOk").disabled = !ok;
-      $("spPrev").textContent = ok ? "Θα καταχωρηθεί ως: " + specName(f) + " (" + f.cat + ", " + f.mat + ")" : "Συμπλήρωσε όλα τα πεδία.";
+      $("spPrev").textContent = ok ? "Θα καταχωρηθεί ως: " + specName(f)
+        : (f.cat === "Άλλο" && !f.desc ? "Στο «Άλλο» γράψε περιγραφή." : "Επίλεξε κατηγορία και υλικό και γράψε διαστάσεις και πάχος.");
     }
+    $("spCatQ").addEventListener("input", function () { chosen = ""; suggest(); upd(); });
+    d.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-cat]"); if (!b) return;
+      chosen = b.dataset.cat; $("spCatQ").value = chosen; suggest(); upd();
+    });
     d.addEventListener("input", upd); d.addEventListener("change", upd); upd();
     $("dlgNo").onclick = function () { d.remove(); };
     $("dlgOk").onclick = function () {
@@ -252,7 +274,7 @@
       if (view === "orderedit") render("orderedit"); else drawProducts();
       updateSend(); saveDraft();
     };
-    setTimeout(function () { var a = $("spDesc"), b = $("spDims"); if (a && b) (b.value ? a : b).focus(); }, 50);
+    setTimeout(function () { var a = $("spCatQ"); if (a && !a.value) { a.focus(); suggest(); } }, 50);
   }
   /* Αναζήτηση: κάθε λέξη πρέπει να υπάρχει· οι αριθμοί/διαστάσεις που γράφονται πρώτα θεωρούνται πρώτη διάσταση
      (30 → πρώτα 30×…, μετά 300×…, και στο τέλος όσα έχουν το 30 αλλού, π.χ. 60×30) */

@@ -140,3 +140,6 @@ textarea.field { padding: 12px 14px; min-height: 140px; resize: vertical; }
 .dlg .card .label { margin: 12px 0 6px; }
 .dlg .spprev { margin: 12px 0 16px; min-height: 40px; font-size: 16px; color: var(--muted); }
 .tagbtn { margin-left: 8px; padding: 2px 12px; border: 1.5px solid var(--accent); border-radius: 999px; background: transparent; color: var(--accent); font-size: 14px; font-weight: 600; }
+.dlg .sugg { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.dlg .sugg:empty { display: none; }
+.dlg .sugg .opt { min-height: 48px; padding: 8px 14px; }

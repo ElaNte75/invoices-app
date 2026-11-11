@@ -2,8 +2,8 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 44;
-  var UNKNOWN = "agnostos"; /* «Άγνωστος πελάτης»: παραγγελίες που δεν ξέρουμε για ποιον είναι */
+  var VERSION = 45;
+  var UNKNOWN = "agnostos"; /* «Πελάτης λιανικής»: παραγγελίες που δεν ξέρουμε για ποιον πελάτη είναι */
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();

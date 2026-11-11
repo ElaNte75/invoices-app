@@ -2,7 +2,8 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 43;
+  var VERSION = 44;
+  var UNKNOWN = "agnostos"; /* «Άγνωστος πελάτης»: παραγγελίες που δεν ξέρουμε για ποιον είναι */
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -120,7 +121,9 @@
   function clientItems() {
     var u = usage().clients;
     var list = O.data.clients.slice().sort(function (a, b) { return (u[b.id] || 0) - (u[a.id] || 0); });
-    return newClients().concat(list).map(function (c) {
+    var first = list.filter(function (c) { return c.id === UNKNOWN; });
+    return first.concat(newClients(), list.filter(function (c) { return c.id !== UNKNOWN; })).map(function (c) {
+      if (c.id === UNKNOWN) return { k: c.id, label: c.name, sub: "όταν δεν ξέρεις για ποιον πελάτη είναι" };
       return { k: c.id, label: c.name, sub: c.isNew ? "Νέος · περιμένει καταχώρηση" : (c.city || "") + (c.ins ? (c.city ? "  ·  " : "") + "⚠ " + c.ins.replace(/\s+/g, " ") : "") };
     });
   }

@@ -38,7 +38,12 @@
       p.note = r.text || "";
     } else if (r.kind === "qr") {
       p.url = r.url;
-      if (r.client) p.client = { id: r.clientId || "", name: r.client };
+      if (r.client) {
+        var cid = r.clientId || "";
+        if (cid === "newpartner") p.partner = { id: "", name: r.client, isNew: true };
+        else if (cid.indexOf("partner:") === 0) p.partner = { id: cid.slice(8), name: r.client };
+        else p.client = { id: cid, name: r.client };
+      }
     } else if (r.kind === "photo") {
       p.photoKind = r.pk;
       p.note = r.text || "";

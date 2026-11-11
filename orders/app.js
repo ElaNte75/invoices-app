@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 41;
+  var VERSION = 42;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -99,7 +99,8 @@
     var html = found.map(function (i) {
       return '<button class="opt' + (qrc && Q.client === i.k ? " sel" : "") + '" data-pick="' + esc(i.k) + '">' + esc(i.label) + (i.sub ? "<small>" + esc(i.sub) + "</small>" : "") + "</button>";
     }).join("");
-    if (!html && qrc && raw) html = '<button class="opt" data-newq="1">Νέος πελάτης: «' + esc(raw) + '»<small>πάτα για καταχώρηση ως νέος πελάτης</small></button>';
+    if (!html && qrc && raw) html = '<button class="opt" data-newq="1">Νέος πελάτης: «' + esc(raw) + '»<small>πάτα για καταχώρηση ως νέος πελάτης</small></button>' +
+      '<button class="opt" data-newq="p">Νέος συνεργάτης: «' + esc(raw) + '»<small>πάτα αν είναι συνεργάτης (δελτίο κατεργασίας, βαφή κ.λπ.)</small></button>';
     if (more) html += '<p class="empty">… και άλλοι ' + more + ". Γράψε κι άλλα γράμματα.</p>";
     $("list").innerHTML = html || (qrc && !raw ? '<p class="empty">Γράψε το όνομα του πελάτη.</p>' : '<p class="empty">Δεν βρέθηκε.</p>');
   }
@@ -570,12 +571,17 @@
 
   /* ---------- σκανάρισμα QR: πρώτα ο πελάτης, μετά η κάμερα ---------- */
   var Q = { client: "", name: "" };
-  function vQrPick() { return vPick("Καταχώρηση με QR", "Γράψε πελάτη για αναζήτηση", clientItems(), "qrc"); }
+  /* Στο QR ο χρήστης διαλέγει πελάτη Ή συνεργάτη (δελτίο συνεργάτη) */
+  function partnerItems() {
+    return (O.data.partners || []).map(function (p) { return { k: "partner:" + p.id, label: p.name, sub: "Συνεργάτης" + (p.role ? " · " + p.role : "") }; });
+  }
+  function vQrPick() { return vPick("Καταχώρηση με QR", "Γράψε πελάτη ή συνεργάτη", clientItems().concat(partnerItems()), "qrc"); }
   function updateQr() { var b = $("qrGo"); if (b) b.disabled = !Q.client; }
   function selectQ(id, name) { Q.client = id; Q.name = name; drawPick(); updateQr(); }
-  function newQrClient() {
+  function newQrClient(kind) {
     var name = $("s").value.trim().replace(/\s+/g, " ");
     if (!name) return;
+    if (kind === "p") { selectQ("newpartner", name); O.toast("Νέος συνεργάτης: " + name); return; }
     if (!O.store.add({ kind: "client", client: { shortName: name, name: name }, text: "" })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
     var rec = O.store.all().filter(function (r) { return r.kind === "client"; })[0];
     pick.items = clientItems();
@@ -735,7 +741,7 @@
     else if (t.dataset.hyes) delRec(t.dataset.hyes);
     else if (a === "scan") { Q = { client: "", name: "" }; go("scan"); }
     else if (t.id === "qrGo") { if (Q.client) go("scancam"); }
-    else if (t.dataset.newq) newQrClient();
+    else if (t.dataset.newq) newQrClient(t.dataset.newq);
     else if (a === "docs") go("docs");
     else if (a === "photo") { P = { kind: "document", data: "", rel: "", note: "", busy: false }; go("photo"); }
     else if (a === "ph-cam") { if (P.rel) go("photocam"); }

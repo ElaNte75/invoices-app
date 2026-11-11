@@ -52,7 +52,7 @@
       kind = "Παραγγελία"; title = r.client;
       inner = "<ul>" + r.items.map(function (i) { var it = Array.isArray(i) ? { name: i[0], qty: i[1] } : i; return "<li>" + esc(curName(it)) + " × " + it.qty + " τμχ</li>"; }).join("") + "</ul>";
     } else if (r.kind === "qr") {
-      kind = "Τιμολόγιο QR"; title = r.client || "Σκανάρισμα τιμολογίου";
+      kind = /^(partner:|newpartner)/.test(r.clientId || "") ? "Δελτίο συνεργάτη" : "Τιμολόγιο QR"; title = r.client || "Σκανάρισμα τιμολογίου";
       inner = '<div class="sub">Περιμένει καταχώριση από τον Claude</div>';
     } else if (r.kind === "photo") {
       var rel = r.rel && O.store.all().filter(function (x) { return O.fileName(x) === r.rel; })[0];

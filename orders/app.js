@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 42;
+  var VERSION = 43;
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
   var S = fresh();
@@ -564,9 +564,11 @@
       if (rec) O.store.remove(rec);
       O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return;
     }
+    var multi = P.multi, rel = P.rel;
     P = { kind: P.kind, data: "", rel: "", note: "", busy: false };
     O.toast("Η φωτογραφία καταχωρήθηκε");
     home(); sync(false);
+    if (multi) askNextPage(rel, "Η σελίδα καταχωρήθηκε");
   }
 
   /* ---------- σκανάρισμα QR: πρώτα ο πελάτης, μετά η κάμερα ---------- */
@@ -610,9 +612,21 @@
       O.toast("Αυτό το τιμολόγιο το έχεις ήδη σκανάρει."); home(); return true;
     }
     if (!O.store.add({ kind: "qr", url: text, client: Q.name, clientId: Q.client })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); home(); return true; }
-    O.toast("Καταχωρήθηκε το τιμολόγιο");
+    var rec = O.store.all().filter(function (r) { return r.kind === "qr"; })[0];
     home(); sync(false);
+    if (rec) askNextPage(O.fileName(rec), "Καταχωρήθηκε το τιμολόγιο");
     return true;
+  }
+
+  /* Πολυσέλιδα δελτία: μετά από κάθε σελίδα ρωτάει αν υπάρχει επόμενη (οι επιπλέον σελίδες δένονται ως φωτογραφίες με το QR) */
+  function askNextPage(rel, title) {
+    setTimeout(function () {
+      dialog(title, "Έχει κι άλλη σελίδα το παραστατικό;", "Προσθήκη σελίδας", "Τέλος", function () {
+        var n = O.store.all().filter(function (r) { return r.kind === "photo" && r.rel === rel; }).length + 2;
+        P = { kind: "document", data: "", rel: rel, note: "Σελίδα " + n, busy: false, multi: true };
+        go("photo");
+      }, function () {});
+    }, 350);
   }
 
   /* Φόρμες πελάτη και προϊόντος: δύο ίσα κουμπιά, Ακύρωση και Καταχώρηση */

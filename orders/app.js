@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 45;
+  var VERSION = 46;
   var UNKNOWN = "agnostos"; /* «Πελάτης λιανικής»: παραγγελίες που δεν ξέρουμε για ποιον πελάτη είναι */
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
@@ -567,15 +567,15 @@
       if (rec) O.store.remove(rec);
       O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return;
     }
-    var multi = P.multi, rel = P.rel;
+    var multi = P.multi, rel = P.rel, src = P.src || "cam";
     P = { kind: P.kind, data: "", rel: "", note: "", busy: false };
     O.toast("Η φωτογραφία καταχωρήθηκε");
     home(); sync(false);
-    if (multi) askNextPage(rel, "Η σελίδα καταχωρήθηκε");
+    askNextPage(rel, multi ? "Η σελίδα καταχωρήθηκε" : "Η φωτογραφία καταχωρήθηκε", src);
   }
 
   /* ---------- σκανάρισμα QR: πρώτα ο πελάτης, μετά η κάμερα ---------- */
-  var Q = { client: "", name: "" };
+  var Q = { client: "", name: "", rel: "", page: 0, urls: [] };
   /* Στο QR ο χρήστης διαλέγει πελάτη Ή συνεργάτη (δελτίο συνεργάτη) */
   function partnerItems() {
     return (O.data.partners || []).map(function (p) { return { k: "partner:" + p.id, label: p.name, sub: "Συνεργάτης" + (p.role ? " · " + p.role : "") }; });
@@ -595,8 +595,9 @@
     sync(false);
   }
   function vScan() {
-    return BACK + "<h1>" + esc(Q.name) + "</h1><p class=\"sub\">Στόχευσε το QR του τιμολογίου. Καταχωρείται μόνο του μόλις διαβαστεί.</p>" +
-      '<video class="cam" id="cam" playsinline muted></video><div class="msg" id="camMsg" hidden></div>';
+    return BACK + "<h1>" + esc(Q.name) + (Q.rel ? " · Σελίδα " + Q.page : "") + "</h1><p class=\"sub\">Στόχευσε το QR " + (Q.rel ? "της σελίδας" : "του τιμολογίου") + ". Καταχωρείται μόνο του μόλις διαβαστεί.</p>" +
+      '<video class="cam" id="cam" playsinline muted></video><div class="msg" id="camMsg" hidden></div>' +
+      (Q.rel ? '<div class="seg"><button data-act="qr-nocode">Η σελίδα δεν έχει QR · Φωτογραφία</button></div>' : "");
   }
   var SCAN_ERR = {
     denied: "Η κάμερα δεν επιτράπηκε. Στο Chrome πάτα το εικονίδιο δίπλα στη διεύθυνση, άνοιξε τις ρυθμίσεις του site και δώσε άδεια στην κάμερα.",
@@ -611,24 +612,44 @@
       if (text !== lastBad) O.toast("Αυτό δεν είναι QR τιμολογίου ΑΑΔΕ.");
       lastBad = text; return false;
     }
+    if (Q.rel && Q.urls.indexOf(text) >= 0) {
+      if (text !== lastBad) O.toast("Αυτό το QR το σκάναρες ήδη σε αυτό το παραστατικό. Σκάναρε την επόμενη σελίδα.");
+      lastBad = text; return false;
+    }
     if (O.store.all().some(function (r) { return r.kind === "qr" && r.url === text; })) {
       O.toast("Αυτό το τιμολόγιο το έχεις ήδη σκανάρει."); home(); return true;
     }
-    if (!O.store.add({ kind: "qr", url: text, client: Q.name, clientId: Q.client })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); home(); return true; }
+    var q = { kind: "qr", url: text, client: Q.name, clientId: Q.client };
+    if (Q.rel) { q.rel = Q.rel; q.page = Q.page; }
+    if (!O.store.add(q)) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); home(); return true; }
     var rec = O.store.all().filter(function (r) { return r.kind === "qr"; })[0];
+    var first = Q.rel || (rec ? O.fileName(rec) : "");
+    Q.urls = (Q.rel ? Q.urls : []).concat([text]);
     home(); sync(false);
-    if (rec) askNextPage(O.fileName(rec), "Καταχωρήθηκε το τιμολόγιο");
+    if (rec) askNextPage(first, Q.rel ? "Η σελίδα καταχωρήθηκε" : "Καταχωρήθηκε το τιμολόγιο", "qr");
     return true;
   }
 
-  /* Πολυσέλιδα δελτία: μετά από κάθε σελίδα ρωτάει αν υπάρχει επόμενη (οι επιπλέον σελίδες δένονται ως φωτογραφίες με το QR) */
-  function askNextPage(rel, title) {
+  /* Πολυσέλιδα παραστατικά: μετά από κάθε σελίδα ρωτάει αν υπάρχει επόμενη και ανοίγει ξανά τον ίδιο τρόπο
+     με τον οποίο μπήκε η πρώτη: QR → κάμερα QR, κάμερα → κάμερα, συλλογή → συλλογή.
+     Οι επόμενες σελίδες δένονται με την πρώτη (rel). */
+  function nextPageNo(rel) {
+    var all = O.store.all(), base = all.some(function (r) { return r.kind === "qr" && O.fileName(r) === rel; }) ? 1 : 0;
+    return base + all.filter(function (r) { return r.rel === rel; }).length + 1;
+  }
+  function photoPage(rel, n, src) {
+    P = { kind: "document", data: "", rel: rel, note: "Σελίδα " + n, busy: false, multi: true, src: src };
+  }
+  function askNextPage(rel, title, how) {
+    if (!rel) return;
     setTimeout(function () {
       dialog(title, "Έχει κι άλλη σελίδα το παραστατικό;", "Προσθήκη σελίδας", "Τέλος", function () {
-        var n = O.store.all().filter(function (r) { return r.kind === "photo" && r.rel === rel; }).length + 2;
-        P = { kind: "document", data: "", rel: rel, note: "Σελίδα " + n, busy: false, multi: true };
+        var n = nextPageNo(rel);
+        if (how === "qr") { Q.rel = rel; Q.page = n; go("scancam"); return; }
+        photoPage(rel, n, how);
         go("photo");
-      }, function () {});
+        if (how === "gal") $("phGal").click(); else go("photocam");
+      }, function () { Q.rel = ""; Q.urls = []; });
     }, 350);
   }
 
@@ -756,18 +777,19 @@
     else if (t.dataset.hdel) { confirmKey = t.dataset.hdel; render("history", true); }
     else if (t.dataset.hno) { confirmKey = ""; render("history", true); }
     else if (t.dataset.hyes) delRec(t.dataset.hyes);
-    else if (a === "scan") { Q = { client: "", name: "" }; go("scan"); }
+    else if (a === "scan") { Q = { client: "", name: "", rel: "", page: 0, urls: [] }; go("scan"); }
     else if (t.id === "qrGo") { if (Q.client) go("scancam"); }
     else if (t.dataset.newq) newQrClient(t.dataset.newq);
     else if (a === "docs") go("docs");
     else if (a === "photo") { P = { kind: "document", data: "", rel: "", note: "", busy: false }; go("photo"); }
-    else if (a === "ph-cam") { if (P.rel) go("photocam"); }
+    else if (a === "ph-cam") { if (P.rel) { P.src = "cam"; go("photocam"); } }
+    else if (a === "qr-nocode") { photoPage(Q.rel, Q.page, "cam"); history.replaceState({ v: "photo", d: depth }, ""); render("photo"); go("photocam"); }
     else if (a === "ph-snap") {
       var d = O.photo.snap($("pcam"));
       if (!d) { O.toast("Η κάμερα δεν είναι έτοιμη. Δοκίμασε ξανά."); return; }
       P.data = d; history.back();
     }
-    else if (a === "ph-gal") { if (P.rel) $("phGal").click(); }
+    else if (a === "ph-gal") { if (P.rel) { P.src = "gal"; $("phGal").click(); } }
     else if (t.id === "savePhoto") savePhoto();
     else if (a === "refresh") { O.toast("Ενημέρωση…"); refresh(false); }
     else if (a === "token") { loginMsg = ""; render("login"); }

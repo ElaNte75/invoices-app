@@ -38,6 +38,7 @@
       p.note = r.text || "";
     } else if (r.kind === "qr") {
       p.url = r.url;
+      if (r.rel) { p.related = r.rel; p.page = r.page; }
       if (r.client) {
         var cid = r.clientId || "";
         if (cid === "newpartner") p.partner = { id: "", name: r.client, isNew: true };

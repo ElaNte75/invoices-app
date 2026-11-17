@@ -837,8 +837,8 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const txt = fold([name, catName, ...feats].join(" "));
     const extras = [[/διατρητ/, "Διάτρητο"], [/χοντρη τρυπα/, "Χοντρή τρύπα"], [/ψιλη τρυπα/, "Ψιλή τρύπα"], [/βουλ/, "Με βούλες"], [/διπλο πατημα/, "Διπλό πάτημα"]].filter(([re]) => re.test(txt)).map(([, l]) => l);
     if ((p.border === "yes" || /μπορντουρ/.test(txt)) && p.border !== "no" && !/χωρισ μπορντουρ/.test(txt)) extras.push("Μπορντούρα");
-    const tm = name.match(/–\s*([\d,.]+)\s*χιλ\./), thick = (t => t != null ? t.toLocaleString("el-GR",{minimumFractionDigits:1,maximumFractionDigits:1}) : "")(p.thickness ? num(p.thickness) : tm ? num(tm[1]) : null);
-    const desc = name.replace(/\s*–\s*[\d,.]+\s*χιλ\./, "").replace(/\s*(?:από\s+)?(?:αλουμιν|ανοξείδωτ|βαμμέν)\S*/gi, "").replace(/(^|[\s×(])[ΜΠΥ](?=\d)/g, "$1").replace(/\s{2,}/g, " ").trim() + (p.unit ? ` (τιμή ανά ${p.unit})` : "");
+    const tm = name.match(/–\s*([\d,.]+)\s*χιλ\./), tv = p.thickness ? num(p.thickness) : tm ? num(tm[1]) : null, thick = tv != null ? tv.toLocaleString("el-GR",{minimumFractionDigits:1,maximumFractionDigits:1}) : "";
+    const desc = name.replace(/\s*–\s*[\d,.]+\s*χιλ\./, "").replace(/\s*(?:από\s+)?(?:αλουμιν|ανοξείδωτ|βαμμέν)\S*/gi, "").replace(/(^|[\s×(])[ΜΠΥ](?=\d)/g, "$1").replace(/\s{2,}/g, " ").trim() + (tv != null ? ` – ${qn(tv)} χιλ.` : "") + (p.unit ? ` (τιμή ανά ${p.unit})` : "");
     return {cat: catName, desc, shape: p.shape || "", shapeF: p.shape || "Χωρίς σχήμα", thick, dim, dn: dimNorm(dim), mat: mat || "–", paint: painted ? "Βαμμένο" : "", paintF: painted ? "Βαμμένο" : "Άβαφο", extras};
   }
   // Ενδεικτικό κόστος υλικού: τιμή €/κιλό και ειδικό βάρος ανά είδος φύλλου (Inox AISI 430 ≈ 7,75).

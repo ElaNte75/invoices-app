@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 48;
+  var VERSION = 49;
   var UNKNOWN = "agnostos"; /* «Πελάτης λιανικής»: παραγγελίες που δεν ξέρουμε για ποιον πελάτη είναι */
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
@@ -60,8 +60,7 @@
     var pend = left ? '<div class="msg">' + left + (left === 1 ? " καταχώρηση περιμένει" : " καταχωρήσεις περιμένουν") + " αποστολή." + (syncMsg ? " " + esc(syncMsg) : "") +
       '</div><button class="small" data-act="sync">Αποστολή τώρα</button>' : "";
     return '<h1>Παραγγελίες</h1>' + pend + '<div class="stack home">' +
-      '<button class="big primary" data-act="new-order">Νέα παραγγελία</button>' +
-      '<button class="big" data-act="pt-new">Παραγγελία σε συνεργάτη<small>προϊόν και πρώτη ύλη (δίσκος), χωρίς δελτίο</small></button>' +
+      '<button class="big primary" data-act="new-order">Νέα παραγγελία<small>πελάτη ή συνεργάτη</small></button>' +
       '<button class="big" data-act="docs">Νέο παραστατικό<small>καταχώρηση με QR ή φωτογραφία</small></button>' +
       '<button class="big" data-act="clients">Επεξεργασία πελατών<small>στοιχεία πελάτη, νέος πελάτης</small></button>' +
       '<button class="big" data-act="new-info">Επεξεργασία καταλόγου<small>πάχος, υλικό, διαστάσεις, περιγραφή</small></button>' +
@@ -518,6 +517,13 @@
     }).then(function () { if (view === "history") render("history", true); });
   }
 
+  /* ---------- νέα παραγγελία: πελάτη ή συνεργάτη ---------- */
+  function vNewOrder() {
+    return BACK + '<div class="stack home docs">' +
+      '<button class="big primary" data-act="order-client">Παραγγελία πελάτη<small>προϊόντα και ποσότητες</small></button>' +
+      '<button class="big" data-act="pt-new">Παραγγελία συνεργάτη<small>προϊόν και πρώτη ύλη (δίσκος), χωρίς δελτίο</small></button></div>';
+  }
+
   /* ---------- παραστατικά: QR ή φωτογραφία ---------- */
   function vDocs() {
     return BACK + '<div class="stack home docs">' +
@@ -790,7 +796,7 @@
     setDock("");
     var html = {
       home: vHome, login: vLogin, loading: vLoading, client: vClient, clients: vClients, clientform: vClientForm, newclient: vNewClient, cat: vCat,
-      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vQrPick, scancam: vScan, docs: vDocs, photo: vPhoto, photocam: vPhotoCam, ptpick: vPtPick, ptorder: vPtOrder,
+      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vQrPick, scancam: vScan, docs: vDocs, neworder: vNewOrder, photo: vPhoto, photocam: vPhotoCam, ptpick: vPtPick, ptorder: vPtOrder,
       history: function () { return O.hist.html(hset, confirmKey); }
     }[v]();
     var y = window.scrollY;
@@ -836,13 +842,13 @@
   window.addEventListener("popstate", function (e) {
     if (ignorePop) { ignorePop = false; return; }
     var d = e.state ? e.state.d : 0, target = e.state ? e.state.v : "home";
-    if ((target === "home" || target === "ptpick") && ptOpen()) {
+    if ((target === "home" || target === "neworder" || target === "ptpick") && ptOpen()) {
       ignorePop = true; history.go(depth - d);
       dialog("Η παραγγελία δεν έχει σταλεί", "Έχεις " + T.lines.length + (T.lines.length === 1 ? " γραμμή" : " γραμμές") + " για τον συνεργάτη " + T.pname + ". Αν βγεις, δεν θα καταχωρηθεί.",
         "Έξοδος", "Συνέχεια", function () { T = ptFresh(); setTimeout(function () { history.go(-depth); }, 50); });
       return;
     }
-    if ((target === "home" || target === "client") && flowOpen()) {
+    if ((target === "home" || target === "neworder" || target === "client") && flowOpen()) {
       /* Η παραγγελία δεν έχει σταλεί: μένουμε στην ίδια οθόνη και ρωτάμε */
       ignorePop = true; history.go(depth - d);
       var n = Object.keys(S.qty).length, cn = S.clientName || (clientById(S.client) || {}).name || "";
@@ -889,7 +895,8 @@
     var t = e.target.closest("button"); if (!t) return;
     var a = t.dataset.act;
     if (a === "back") history.back();
-    else if (a === "new-order") {
+    else if (a === "new-order") go("neworder");
+    else if (a === "order-client") {
       var dr = readDraft();
       if (dr) {
         var nm = dr.clientName || (clientById(dr.client) || {}).name || "", cnt = Object.keys(dr.qty).length;

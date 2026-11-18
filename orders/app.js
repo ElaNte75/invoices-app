@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 51;
+  var VERSION = 52;
   var UNKNOWN = "agnostos"; /* «Πελάτης λιανικής»: παραγγελίες που δεν ξέρουμε για ποιον πελάτη είναι */
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
@@ -542,6 +542,16 @@
     });
     return o;
   }
+  /* Χωρίς QR στο ιστορικό: γράφεις το όνομα και βγαίνουν μαζί πελάτες και συνεργάτες (το πολύ 6) */
+  function phWhoList() {
+    if (P.who) return '<button class="opt sel" data-phw="' + esc(P.who.id) + '">' + esc(P.who.name) + "<small>" + (/^partner:/.test(P.who.id) ? "Συνεργάτης · δελτίο συνεργάτη" : "Πελάτης") + "</small></button>";
+    var q = norm((P.whoQ || "").trim()); if (!q) return "";
+    var found = clientItems().concat(partnerItems()).filter(function (i) { return norm(i.label + " " + i.sub).indexOf(q) > -1; });
+    var more = found.length > 6 ? found.length - 6 : 0;
+    return (found.slice(0, 6).map(function (i) {
+      return '<button class="opt" data-phw="' + esc(i.k) + '">' + esc(i.label) + (i.sub ? "<small>" + esc(/^partner:/.test(i.k) ? i.sub : "Πελάτης" + (i.sub ? " · " + i.sub : "")) + "</small>" : "") + "</button>";
+    }).join("") + (more ? '<p class="empty">… και άλλοι ' + more + ". Γράψε κι άλλα γράμματα.</p>" : "")) || '<p class="empty">Δεν βρέθηκε.</p>';
+  }
   function phLinked() { return !!(P.rel || P.who); }
   function vPhoto() {
     var off = phLinked() ? "" : " disabled";
@@ -549,8 +559,8 @@
       (P.multi ? '<div class="label">' + esc(P.note) + "</div>" :
       '<div class="label">Σε ποιο παραστατικό ανήκει;</div>' +
       (relItems().length ? '<select class="field" id="phRel" aria-label="Παραστατικό">' + relOptions() + "</select>" : "") +
-      '<button class="opt' + (P.who ? " sel" : "") + '" data-act="ph-who">' + (P.who ? esc(P.who.name) + "<small>" + (/^(partner:|newpartner)/.test(P.who.id) ? "Συνεργάτης" : "Πελάτης") + " · πάτα για αλλαγή</small>"
-        : "Παραστατικό χωρίς QR · Πελάτης ή συνεργάτης<small>π.χ. δελτίο συνεργάτη που δεν διαβάζεται</small>") + "</button>") +
+      '<input class="field" id="phWho" type="search" autocomplete="off" placeholder="' + (relItems().length ? "ή γράψε πελάτη ή συνεργάτη" : "Γράψε πελάτη ή συνεργάτη") + '" aria-label="Πελάτης ή συνεργάτης" value="' + esc(P.who ? P.who.name : P.whoQ || "") + '">' +
+      '<div class="list" id="phWhoList">' + phWhoList() + "</div>") +
       '<div class="seg" id="phBtns"><button data-act="ph-cam"' + off + '>Κάμερα</button><button data-act="ph-gal"' + off + '>Συλλογή</button></div>' +
       '<input type="file" accept="image/*" id="phGal" hidden>' +
       '<img class="thumb" id="phPrev" alt="" ' + (P.data ? 'src="' + P.data + '"' : "hidden") + ">" +
@@ -717,7 +727,6 @@
   function partnerItems() {
     return (O.data.partners || []).map(function (p) { return { k: "partner:" + p.id, label: p.name, sub: "Συνεργάτης" + (p.role ? " · " + p.role : "") }; });
   }
-  function vPhWho() { return vPick("Σε ποιον ανήκει;", "Γράψε πελάτη ή συνεργάτη", clientItems().concat(partnerItems()), "phw"); }
   function vQrPick() { return vPick("Καταχώρηση με QR", "Γράψε πελάτη ή συνεργάτη", clientItems().concat(partnerItems()), "qrc"); }
   function updateQr() { var b = $("qrGo"); if (b) b.disabled = !Q.client; }
   function selectQ(id, name) { Q.client = id; Q.name = name; drawPick(); updateQr(); }
@@ -803,7 +812,7 @@
     setDock("");
     var html = {
       home: vHome, login: vLogin, loading: vLoading, client: vClient, clients: vClients, clientform: vClientForm, newclient: vNewClient, cat: vCat,
-      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vQrPick, scancam: vScan, docs: vDocs, neworder: vNewOrder, photo: vPhoto, photocam: vPhotoCam, phwho: vPhWho, ptpick: vPtPick, ptorder: vPtOrder,
+      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vQrPick, scancam: vScan, docs: vDocs, neworder: vNewOrder, photo: vPhoto, photocam: vPhotoCam, ptpick: vPtPick, ptorder: vPtOrder,
       history: function () { return O.hist.html(hset, confirmKey); }
     }[v]();
     var y = window.scrollY;
@@ -934,7 +943,11 @@
     else if (t.dataset.edpt !== undefined) ptDialog(+t.dataset.edpt);
     else if (t.id === "ptSend") savePt();
     else if (a === "photo") { P = { kind: "document", data: "", rel: "", note: "", busy: false }; go("photo"); }
-    else if (a === "ph-who") go("phwho");
+    else if (t.dataset.phw !== undefined) {
+      if (P.who) { P.who = null; P.whoQ = ""; render("photo", true); var w = $("phWho"); if (w) w.focus(); return; }
+      var wi = clientItems().concat(partnerItems()).filter(function (i) { return i.k === t.dataset.phw; })[0];
+      P.who = { id: t.dataset.phw, name: wi ? wi.label : "" }; P.rel = ""; render("photo", true);
+    }
     else if (a === "ph-cam") { if (phLinked()) { P.src = "cam"; go("photocam"); } }
     else if (a === "qr-nocode") { photoPage(Q.rel, Q.page, "cam"); history.replaceState({ v: "photo", d: depth }, ""); render("photo"); go("photocam"); }
     else if (a === "ph-snap") {
@@ -951,7 +964,6 @@
     else if (t.dataset.pick !== undefined) {
       if (pick.kind === "cl") { openClientForm(t.dataset.pick); return; }
       if (pick.kind === "ptc") { var pi = pick.items.filter(function (i) { return i.k === t.dataset.pick; })[0]; T.pid = t.dataset.pick; T.pname = pi ? pi.label : ""; go("ptorder"); return; }
-      if (pick.kind === "phw") { var wi = pick.items.filter(function (i) { return i.k === t.dataset.pick; })[0]; P.who = { id: t.dataset.pick, name: wi ? wi.label : "" }; P.rel = ""; history.back(); return; }
       if (pick.kind === "qrc") { var qi = pick.items.filter(function (i) { return i.k === t.dataset.pick; })[0]; selectQ(t.dataset.pick, qi ? qi.label : ""); return; }
       if (pick.kind === "client") S.client = t.dataset.pick;
       else { S.cat = t.dataset.pick; S.mat = ""; S.q = ""; }
@@ -996,6 +1008,10 @@
     var el = e.target;
     if (el.id === "s") drawPick();
     else if (el.id === "phNote") P.note = el.value;
+    else if (el.id === "phWho") {
+      P.whoQ = el.value; if (P.who || P.rel) { P.who = null; P.rel = ""; var r = $("phRel"); if (r) r.selectedIndex = 0; }
+      $("phWhoList").innerHTML = phWhoList(); updatePhoto();
+    }
     else if (el.id === "pq") { S.q = el.value; drawProducts(); }
     else if (el.id === "note" || el.classList.contains("ef")) updateSave();
     else if (el.classList.contains("cf")) { if ($("saveCF")) updateCF(); else if ($("saveClient")) $("saveClient").disabled = !O.newClient.ok(); }
@@ -1008,7 +1024,7 @@
   document.addEventListener("change", function (e) {
     var el = e.target;
     if (el.id === "phGal") { onPhotoFile(el.files && el.files[0]); el.value = ""; }
-    else if (el.id === "phRel") { P.rel = el.value; P.who = null; render("photo", true); }
+    else if (el.id === "phRel") { P.rel = el.value; P.who = null; P.whoQ = ""; render("photo", true); }
   });
   document.addEventListener("focusin", function (e) { if (e.target.dataset && e.target.dataset.i) e.target.select(); });
   document.addEventListener("focusout", function (e) { if (e.target.dataset && e.target.dataset.i) e.target.value = S.qty[e.target.dataset.i] || 0; });

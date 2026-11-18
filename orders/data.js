@@ -7,7 +7,8 @@
   var TREES = "query { " + REPO + " {" +
     ' c: object(expression:"main:data/customers") { ... on Tree { entries { name oid } } }' +
     ' p: object(expression:"main:data/products") { ... on Tree { entries { name oid } } }' +
-    ' s: object(expression:"main:data/partners") { ... on Tree { entries { name oid } } } } }';
+    ' s: object(expression:"main:data/partners") { ... on Tree { entries { name oid } } }' +
+    ' m: object(expression:"main:data/materials") { ... on Tree { entries { name oid } } } } }';
   var BATCH = 150;
 
   function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -24,7 +25,7 @@
   O.loadCache = function () {
     var raw = get(CACHE_KEY);
     if (!raw) return false;
-    try { O.data = JSON.parse(raw); O.data.partners = O.data.partners || []; return O.data.products.length > 0; } catch (e) { return false; }
+    try { O.data = JSON.parse(raw); O.data.partners = O.data.partners || []; O.data.materials = O.data.materials || []; return O.data.products.length > 0; } catch (e) { return false; }
   };
 
   function gql(query) {
@@ -49,6 +50,8 @@
       short: j.shortName || "", full: j.name || "", address: j.address || "", phone: j.phone || "", doy: j.doy || "", prof: j.profession || "", web: j.website || "", ins: j.instructions || ""
     };
   }
+  /* Πρώτες ύλες (δίσκοι): πάχος σε χιλ., διάμετρος σε χιλ. */
+  function slimMaterial(j, f) { return { id: f.id, o: f.oid, thickness: +j.thickness || 0, diameter: +j.diameter || 0, code: j.code || "" }; }
   function slimPartner(j, f) {
     return { id: f.id, o: f.oid, name: j.shortName || j.name || f.id, role: j.role || "", full: j.name || "" };
   }
@@ -70,10 +73,11 @@
     O.data.clients.forEach(function (r) { old["c:" + r.id] = r; });
     O.data.products.forEach(function (r) { old["p:" + r.id] = r; });
     (O.data.partners || []).forEach(function (r) { old["s:" + r.id] = r; });
+    (O.data.materials || []).forEach(function (r) { old["m:" + r.id] = r; });
     return gql(TREES).then(function (repo) {
       if (!repo.c || !repo.p) throw { code: "access" };
       var files = [];
-      [["c", repo.c], ["p", repo.p], ["s", repo.s]].forEach(function (g) {
+      [["c", repo.c], ["p", repo.p], ["s", repo.s], ["m", repo.m]].forEach(function (g) {
         if (g[1]) g[1].entries.forEach(function (e) {
           if (/\.json$/.test(e.name)) files.push({ t: g[0], id: e.name.replace(/\.json$/, ""), oid: e.oid });
         });
@@ -90,15 +94,15 @@
         });
       })).then(function () { return files; });
     }).then(function (files) {
-      var clients = [], products = [], partners = [];
+      var clients = [], products = [], partners = [], materials = [];
       files.forEach(function (f) {
         var rec = null;
         if (f.text) {
-          try { var j = JSON.parse(f.text); rec = f.t === "c" ? slimClient(j, f) : f.t === "s" ? slimPartner(j, f) : slimProduct(j, f); } catch (e) {}
+          try { var j = JSON.parse(f.text); rec = f.t === "c" ? slimClient(j, f) : f.t === "s" ? slimPartner(j, f) : f.t === "m" ? slimMaterial(j, f) : slimProduct(j, f); } catch (e) {}
         } else rec = old[f.t + ":" + f.id] || null;
-        if (rec) (f.t === "c" ? clients : f.t === "s" ? partners : products).push(rec);
+        if (rec) (f.t === "c" ? clients : f.t === "s" ? partners : f.t === "m" ? materials : products).push(rec);
       });
-      O.data = { clients: clients.sort(byName), products: products.sort(byName), partners: partners.sort(byName), updated: new Date().toISOString() };
+      O.data = { clients: clients.sort(byName), products: products.sort(byName), partners: partners.sort(byName), materials: materials, updated: new Date().toISOString() };
       set(CACHE_KEY, JSON.stringify(O.data));
       return O.data;
     });

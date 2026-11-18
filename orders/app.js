@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 49;
+  var VERSION = 50;
   var UNKNOWN = "agnostos"; /* «Πελάτης λιανικής»: παραγγελίες που δεν ξέρουμε για ποιον πελάτη είναι */
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
@@ -608,6 +608,7 @@
   function knownDiscs() {
     var seen = {}, out = [];
     function add(d) { if (!d) return; var k = d.thickness + "|" + d.diameter; if (!seen[k]) { seen[k] = 1; out.push({ thickness: d.thickness, diameter: d.diameter }); } }
+    (O.data.materials || []).forEach(function (m) { if (m.thickness > 0 && m.diameter > 0) add(m); });
     O.data.products.forEach(function (p) { add(cardDisc(p)); });
     O.store.all().filter(function (r) { return r.kind === "order" && isPartnerOrder(r); }).forEach(function (r) { r.items.forEach(function (l) { add(l.disc); }); });
     T.lines.forEach(function (l) { add(l.disc); });

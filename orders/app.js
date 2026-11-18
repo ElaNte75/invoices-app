@@ -521,7 +521,7 @@
   function vNewOrder() {
     return BACK + '<div class="stack home docs">' +
       '<button class="big primary" data-act="order-client">Παραγγελία πελάτη<small>προϊόντα και ποσότητες</small></button>' +
-      '<button class="big" data-act="pt-new">Παραγγελία συνεργάτη<small>προϊόν και πρώτη ύλη (δίσκος), χωρίς δελτίο</small></button></div>';
+      '<button class="big" data-act="pt-new">Παραγγελία συνεργάτη<small>προϊόν και πρώτη ύλη (δίσκος)</small></button></div>';
   }
 
   /* ---------- παραστατικά: QR ή φωτογραφία ---------- */

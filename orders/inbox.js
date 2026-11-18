@@ -30,7 +30,7 @@
           var j = JSON.parse(unb64(f.content)), m = e.name.match(/-(order|client|clientEdit|edit|info|qr|photo)-([a-z0-9]{4})\.json$/);
           var rec = { id: m[2], t: j.createdAt, kind: m[1], sent: true, sentAt: new Date().toISOString(), sha: f.sha || e.sha, text: j.note || j.text || "" };
           if (j.editedAt) rec.edited = j.editedAt;
-          if (rec.kind === "order") { rec.client = j.client.name; rec.clientId = j.client.id; rec.items = j.items; }
+          if (rec.kind === "order") { var who = j.client || j.partner || {}; rec.client = who.name; rec.clientId = j.partner ? "partner:" + who.id : who.id; rec.items = j.items; }
           else if (rec.kind === "client") rec.client = j.customer || {};
           else if (rec.kind === "clientEdit") { rec.client = j.client.name; rec.clientId = j.client.id; rec.changes = j.changes; }
           else if (rec.kind === "edit" || rec.kind === "info") { rec.product = j.product.name; rec.productId = j.product.id; rec.changes = j.changes; }

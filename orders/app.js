@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 46;
+  var VERSION = 47;
   var UNKNOWN = "agnostos"; /* «Πελάτης λιανικής»: παραγγελίες που δεν ξέρουμε για ποιον πελάτη είναι */
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
@@ -25,7 +25,10 @@
       return !known.some(function (c) { return norm(c.name) === n || (a && c.afm === a); });
     }).map(function (r) { return { id: "new-" + r.id, name: r.client.shortName, city: r.client.city || "", isNew: true }; });
   }
-  function clientById(id) { return newClients().concat(O.data.clients).filter(function (c) { return c.id === id; })[0]; }
+  /* Συνεργάτες (κατεργασία, βαφή κ.λπ.) στη νέα παραγγελία: id «partner:<id>», στέλνονται ως partner */
+  function isPartner(id) { return String(id || "").indexOf("partner:") === 0; }
+  function partnerClients() { return (O.data.partners || []).map(function (p) { return { id: "partner:" + p.id, name: p.name, role: p.role || "", isPartner: true }; }); }
+  function clientById(id) { return newClients().concat(O.data.clients, partnerClients()).filter(function (c) { return c.id === id; })[0]; }
   function prodById(id) { return O.data.products.filter(function (p) { return p.id === id; })[0]; }
   function setDock(html) {
     dock.innerHTML = html || "";
@@ -127,7 +130,14 @@
       return { k: c.id, label: c.name, sub: c.isNew ? "Νέος · περιμένει καταχώρηση" : (c.city || "") + (c.ins ? (c.city ? "  ·  " : "") + "⚠ " + c.ins.replace(/\s+/g, " ") : "") };
     });
   }
-  function vClient() { return vPick("Πελάτης", "Γράψε για αναζήτηση", clientItems(), "client"); }
+  function orderClientItems() {
+    var u = usage().clients, items = clientItems(), first = items.filter(function (i) { return i.k === UNKNOWN; });
+    var rest = items.filter(function (i) { return i.k !== UNKNOWN; }).concat(partnerClients().map(function (p) {
+      return { k: p.id, label: p.name, sub: "Συνεργάτης" + (p.role ? " · " + p.role : "") + " · χωρίς δελτίο" };
+    }));
+    return first.concat(rest.map(function (i, n) { return { i: i, n: n }; }).sort(function (a, b) { return (u[b.i.k] || 0) - (u[a.i.k] || 0) || a.n - b.n; }).map(function (x) { return x.i; }));
+  }
+  function vClient() { return vPick("Πελάτης ή συνεργάτης", "Γράψε για αναζήτηση", orderClientItems(), "client"); }
   function vClients() { return vPick("Επεξεργασία πελατών", "Γράψε για αναζήτηση", clientItems(), "cl"); }
 
   /* φόρμα πελάτη για επεξεργασία: cf = { kind: "client" | "clientEdit", rec, c, base, vals, note } */
@@ -195,9 +205,9 @@
   /* ---------- προϊόντα ---------- */
   /* Στην επεξεργασία παραγγελίας ο πελάτης δεν αλλάζει */
   function clientCrumb() {
-    var c = clientById(S.client), name = esc(S.clientName || (c ? c.name : ""));
-    if (S.editId) return '<div class="crumb ro"><span><small>Πελάτης</small>' + name + "</span></div>";
-    return '<button class="crumb" data-act="edit-client"><span><small>Πελάτης</small>' + name + "</span></button>";
+    var c = clientById(S.client), name = esc(S.clientName || (c ? c.name : "")), lab = isPartner(S.client) ? "Συνεργάτης" : "Πελάτης";
+    if (S.editId) return '<div class="crumb ro"><span><small>' + lab + "</small>" + name + "</span></div>";
+    return '<button class="crumb" data-act="edit-client"><span><small>' + lab + "</small>" + name + "</span></button>";
   }
   function itemName(id) { var p = prodById(id); return S.names[id] || (p ? p.name : id); }
   /* Γραμμή που δεν είναι στον κατάλογο (νέα ειδική κατασκευή) πηγαίνει χωρίς id και με special: true */

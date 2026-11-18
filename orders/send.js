@@ -10,7 +10,7 @@
   }
   O.fileName = function (r) { return r.t.replace(/[:.]/g, "-") + "-" + r.kind + "-" + r.id + ".json"; };
   O.what = function (r) {
-    if (r.kind === "order") return "παραγγελία " + r.client;
+    if (r.kind === "order") return (String(r.clientId || "").indexOf("partner:") === 0 ? "παραγγελία συνεργάτη " : "παραγγελία ") + r.client;
     if (r.kind === "client") return "νέος πελάτης " + (r.client.shortName || "");
     if (r.kind === "clientEdit") return "επεξεργασία πελάτη " + r.client;
     if (r.kind === "edit") return "επεξεργασία καταλόγου για " + r.product;
@@ -22,7 +22,8 @@
     var p = { createdAt: r.t, kind: r.kind, source: "orders-app", status: "new" };
     if (r.edited) p.editedAt = r.edited;
     if (r.kind === "order") {
-      p.client = { id: r.clientId || "", name: r.client };
+      if (String(r.clientId || "").indexOf("partner:") === 0) p.partner = { id: r.clientId.slice(8), name: r.client };
+      else p.client = { id: r.clientId || "", name: r.client };
       p.items = r.items.map(function (i) { return Array.isArray(i) ? { name: i[0], qty: i[1] } : i; });
     } else if (r.kind === "client") {
       p.localId = "new-" + r.id;

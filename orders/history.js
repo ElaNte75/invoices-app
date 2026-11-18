@@ -49,7 +49,7 @@
     var time = new Date(r.t).toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" });
     var kind, title, inner = "";
     if (r.kind === "order") {
-      kind = "Παραγγελία"; title = r.client;
+      kind = /^partner:/.test(r.clientId || "") ? "Παραγγελία συνεργάτη" : "Παραγγελία"; title = r.client;
       inner = "<ul>" + r.items.map(function (i) { var it = Array.isArray(i) ? { name: i[0], qty: i[1] } : i; return "<li>" + esc(curName(it)) + " × " + it.qty + " τμχ</li>"; }).join("") + "</ul>";
     } else if (r.kind === "qr") {
       kind = /^(partner:|newpartner)/.test(r.clientId || "") ? "Δελτίο συνεργάτη" : "Τιμολόγιο QR"; title = r.client || "Σκανάρισμα τιμολογίου";

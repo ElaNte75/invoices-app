@@ -2,7 +2,7 @@
 (function (O) {
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), dock = $("dock");
-  var VERSION = 50;
+  var VERSION = 51;
   var UNKNOWN = "agnostos"; /* «Πελάτης λιανικής»: παραγγελίες που δεν ξέρουμε για ποιον πελάτη είναι */
   var view = "home", mode = "order", depth = 0, loginMsg = "", syncMsg = "";
   var hset = "orders", confirmKey = "", ncFrom = "", cf = null;
@@ -542,12 +542,15 @@
     });
     return o;
   }
+  function phLinked() { return !!(P.rel || P.who); }
   function vPhoto() {
-    var off = P.rel ? "" : " disabled";
+    var off = phLinked() ? "" : " disabled";
     return histBtn("hist-photos") + '<h1>Φωτογραφία</h1><div class="pform">' +
+      (P.multi ? '<div class="label">' + esc(P.note) + "</div>" :
       '<div class="label">Σε ποιο παραστατικό ανήκει;</div>' +
-      (relItems().length ? '<select class="field" id="phRel" aria-label="Παραστατικό">' + relOptions() + "</select>"
-        : '<p class="sub">Δεν υπάρχει παραστατικό στο ιστορικό που να μην έχει περαστεί. Κάνε πρώτα παραγγελία ή καταχώρηση με QR.</p>') +
+      (relItems().length ? '<select class="field" id="phRel" aria-label="Παραστατικό">' + relOptions() + "</select>" : "") +
+      '<button class="opt' + (P.who ? " sel" : "") + '" data-act="ph-who">' + (P.who ? esc(P.who.name) + "<small>" + (/^(partner:|newpartner)/.test(P.who.id) ? "Συνεργάτης" : "Πελάτης") + " · πάτα για αλλαγή</small>"
+        : "Παραστατικό χωρίς QR · Πελάτης ή συνεργάτης<small>π.χ. δελτίο συνεργάτη που δεν διαβάζεται</small>") + "</button>") +
       '<div class="seg" id="phBtns"><button data-act="ph-cam"' + off + '>Κάμερα</button><button data-act="ph-gal"' + off + '>Συλλογή</button></div>' +
       '<input type="file" accept="image/*" id="phGal" hidden>' +
       '<img class="thumb" id="phPrev" alt="" ' + (P.data ? 'src="' + P.data + '"' : "hidden") + ">" +
@@ -559,8 +562,8 @@
       '<button class="snap" data-act="ph-snap" aria-label="Λήψη φωτογραφίας"></button>';
   }
   function updatePhoto() {
-    var b = $("savePhoto"); if (b) b.disabled = !P.rel || !P.data || P.busy;
-    var g = $("phBtns"); if (g) Array.prototype.forEach.call(g.children, function (x) { x.disabled = !P.rel; });
+    var b = $("savePhoto"); if (b) b.disabled = !phLinked() || !P.data || P.busy;
+    var g = $("phBtns"); if (g) Array.prototype.forEach.call(g.children, function (x) { x.disabled = !phLinked(); });
   }
   function onPhotoFile(file) {
     if (!file) return;
@@ -572,14 +575,16 @@
     }).catch(function () { P.busy = false; updatePhoto(); O.toast("Η φωτογραφία δεν διαβάστηκε."); });
   }
   function savePhoto() {
-    if (!P.data || !P.rel) return;
-    if (!O.store.add({ kind: "photo", pk: P.kind, text: P.note.trim(), rel: P.rel })) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
+    if (!P.data || !phLinked()) return;
+    var nr = { kind: "photo", pk: P.kind, text: P.note.trim(), rel: P.rel };
+    if (!P.rel && P.who) { nr.clientId = P.who.id; nr.client = P.who.name; }
+    if (!O.store.add(nr)) { O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return; }
     var rec = O.store.all().filter(function (r) { return r.kind === "photo"; })[0];
     if (!rec || !O.photo.put(rec.id, P.data)) {
       if (rec) O.store.remove(rec);
       O.toast("Δεν αποθηκεύτηκε. Ο χώρος του κινητού είναι γεμάτος."); return;
     }
-    var multi = P.multi, rel = P.rel, src = P.src || "cam";
+    var multi = P.multi, rel = P.rel || O.fileName(rec), src = P.src || "cam";
     P = { kind: P.kind, data: "", rel: "", note: "", busy: false };
     O.toast("Η φωτογραφία καταχωρήθηκε");
     home(); sync(false);
@@ -712,6 +717,7 @@
   function partnerItems() {
     return (O.data.partners || []).map(function (p) { return { k: "partner:" + p.id, label: p.name, sub: "Συνεργάτης" + (p.role ? " · " + p.role : "") }; });
   }
+  function vPhWho() { return vPick("Σε ποιον ανήκει;", "Γράψε πελάτη ή συνεργάτη", clientItems().concat(partnerItems()), "phw"); }
   function vQrPick() { return vPick("Καταχώρηση με QR", "Γράψε πελάτη ή συνεργάτη", clientItems().concat(partnerItems()), "qrc"); }
   function updateQr() { var b = $("qrGo"); if (b) b.disabled = !Q.client; }
   function selectQ(id, name) { Q.client = id; Q.name = name; drawPick(); updateQr(); }
@@ -766,7 +772,7 @@
      με τον οποίο μπήκε η πρώτη: QR → κάμερα QR, κάμερα → κάμερα, συλλογή → συλλογή.
      Οι επόμενες σελίδες δένονται με την πρώτη (rel). */
   function nextPageNo(rel) {
-    var all = O.store.all(), base = all.some(function (r) { return r.kind === "qr" && O.fileName(r) === rel; }) ? 1 : 0;
+    var all = O.store.all(), base = all.some(function (r) { return (r.kind === "qr" || r.kind === "photo") && O.fileName(r) === rel; }) ? 1 : 0;
     return base + all.filter(function (r) { return r.rel === rel; }).length + 1;
   }
   function photoPage(rel, n, src) {
@@ -797,7 +803,7 @@
     setDock("");
     var html = {
       home: vHome, login: vLogin, loading: vLoading, client: vClient, clients: vClients, clientform: vClientForm, newclient: vNewClient, cat: vCat,
-      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vQrPick, scancam: vScan, docs: vDocs, neworder: vNewOrder, photo: vPhoto, photocam: vPhotoCam, ptpick: vPtPick, ptorder: vPtOrder,
+      products: vProducts, note: vNote, orderedit: vOrderEdit, scan: vQrPick, scancam: vScan, docs: vDocs, neworder: vNewOrder, photo: vPhoto, photocam: vPhotoCam, phwho: vPhWho, ptpick: vPtPick, ptorder: vPtOrder,
       history: function () { return O.hist.html(hset, confirmKey); }
     }[v]();
     var y = window.scrollY;
@@ -928,14 +934,15 @@
     else if (t.dataset.edpt !== undefined) ptDialog(+t.dataset.edpt);
     else if (t.id === "ptSend") savePt();
     else if (a === "photo") { P = { kind: "document", data: "", rel: "", note: "", busy: false }; go("photo"); }
-    else if (a === "ph-cam") { if (P.rel) { P.src = "cam"; go("photocam"); } }
+    else if (a === "ph-who") go("phwho");
+    else if (a === "ph-cam") { if (phLinked()) { P.src = "cam"; go("photocam"); } }
     else if (a === "qr-nocode") { photoPage(Q.rel, Q.page, "cam"); history.replaceState({ v: "photo", d: depth }, ""); render("photo"); go("photocam"); }
     else if (a === "ph-snap") {
       var d = O.photo.snap($("pcam"));
       if (!d) { O.toast("Η κάμερα δεν είναι έτοιμη. Δοκίμασε ξανά."); return; }
       P.data = d; history.back();
     }
-    else if (a === "ph-gal") { if (P.rel) { P.src = "gal"; $("phGal").click(); } }
+    else if (a === "ph-gal") { if (phLinked()) { P.src = "gal"; $("phGal").click(); } }
     else if (t.id === "savePhoto") savePhoto();
     else if (a === "refresh") { O.toast("Ενημέρωση…"); refresh(false); }
     else if (a === "token") { loginMsg = ""; render("login"); }
@@ -944,6 +951,7 @@
     else if (t.dataset.pick !== undefined) {
       if (pick.kind === "cl") { openClientForm(t.dataset.pick); return; }
       if (pick.kind === "ptc") { var pi = pick.items.filter(function (i) { return i.k === t.dataset.pick; })[0]; T.pid = t.dataset.pick; T.pname = pi ? pi.label : ""; go("ptorder"); return; }
+      if (pick.kind === "phw") { var wi = pick.items.filter(function (i) { return i.k === t.dataset.pick; })[0]; P.who = { id: t.dataset.pick, name: wi ? wi.label : "" }; P.rel = ""; history.back(); return; }
       if (pick.kind === "qrc") { var qi = pick.items.filter(function (i) { return i.k === t.dataset.pick; })[0]; selectQ(t.dataset.pick, qi ? qi.label : ""); return; }
       if (pick.kind === "client") S.client = t.dataset.pick;
       else { S.cat = t.dataset.pick; S.mat = ""; S.q = ""; }
@@ -1000,7 +1008,7 @@
   document.addEventListener("change", function (e) {
     var el = e.target;
     if (el.id === "phGal") { onPhotoFile(el.files && el.files[0]); el.value = ""; }
-    else if (el.id === "phRel") { P.rel = el.value; updatePhoto(); }
+    else if (el.id === "phRel") { P.rel = el.value; P.who = null; render("photo", true); }
   });
   document.addEventListener("focusin", function (e) { if (e.target.dataset && e.target.dataset.i) e.target.select(); });
   document.addEventListener("focusout", function (e) { if (e.target.dataset && e.target.dataset.i) e.target.value = S.qty[e.target.dataset.i] || 0; });

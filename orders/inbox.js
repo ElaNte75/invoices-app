@@ -35,7 +35,7 @@
           else if (rec.kind === "clientEdit") { rec.client = j.client.name; rec.clientId = j.client.id; rec.changes = j.changes; }
           else if (rec.kind === "edit" || rec.kind === "info") { rec.product = j.product.name; rec.productId = j.product.id; rec.changes = j.changes; }
           else if (rec.kind === "qr") { rec.url = j.url; if (j.client) { rec.client = j.client.name; rec.clientId = j.client.id; } else if (j.partner) { rec.client = j.partner.name; rec.clientId = j.partner.isNew ? "newpartner" : "partner:" + j.partner.id; } }
-          else if (rec.kind === "photo") { rec.pk = j.photoKind; rec.rel = j.related || ""; }
+          else if (rec.kind === "photo") { rec.pk = j.photoKind; rec.rel = j.related || ""; var pw = j.client || j.partner; if (pw) { rec.client = pw.name; rec.clientId = j.partner ? "partner:" + pw.id : pw.id; } }
           if (rec.t && O.fileName(rec) === e.name && O.store.insert(rec)) any = true;
         }).catch(function () {});
       });

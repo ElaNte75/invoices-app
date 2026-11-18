@@ -51,6 +51,11 @@
       p.photoKind = r.pk;
       p.note = r.text || "";
       if (r.rel) p.related = r.rel;
+      else if (r.client) {
+        var pid = r.clientId || "";
+        if (pid.indexOf("partner:") === 0) p.partner = { id: pid.slice(8), name: r.client };
+        else p.client = { id: pid, name: r.client };
+      }
       p.image = { type: "image/jpeg", data: O.photo.base64(r.id) };
     } else {
       p.product = { id: r.productId || "", name: r.product };

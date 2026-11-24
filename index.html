@@ -642,7 +642,7 @@ select.reason{font-size:.82rem;padding:4px 6px}
 
   const ymd = t => `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
   const curYM = () => ymd(new Date()).slice(0,7);
-  const af = {cat:"all", shape:"all", mat:"all", feat:"all", paint:"all"}, ASEL = {aCat:"cat", aShape:"shape", aMat:"mat", aFeat:"feat", aPaint:"paint"};
+  const af = {cat:"all", shape:"all", mat:"all", feat:"all", paint:"all", abc:"all"}, ASEL = {aCat:"cat", aShape:"shape", aMat:"mat", aFeat:"feat", aPaint:"paint", aAbc:"abc"};
   let anaTab = "sum", anaPeriod = "M", anaFrom = "", anaTo = "", prevStats = null;
   const anaSort = {};
   const MONTHS = ["Ιανουάριος","Φεβρουάριος","Μάρτιος","Απρίλιος","Μάιος","Ιούνιος","Ιούλιος","Αύγουστος","Σεπτέμβριος","Οκτώβριος","Νοέμβριος","Δεκέμβριος"];
@@ -735,12 +735,25 @@ select.reason{font-size:.82rem;padding:4px 6px}
     const prodMap = new Map();
     customers.forEach(c => statsFor(c._id).forEach(s => { const p = prodMap.get(s.k) || {k:s.k, name:s.name, code:s.code, cat:s.cat, qty:0, value:0, list:[]}; p.qty += s.qty; p.value += s.value; p.list.push({c, s}); prodMap.set(s.k, p); }));
     const prods = [...prodMap.values()];
-    docs.filter(d => d.purpose !== "Επιστροφή" && d.date).forEach(d => { const w = weekOf(d.date), seen = new Set(); lines(d).forEach(l => { if (!key(l.product) && !l.code) return; const k = lineKey(l), p = prodMap.get(k); if (!p || seen.has(k)) return; seen.add(k); (p.weekSet = p.weekSet || new Set()).add(w); p.orders = (p.orders || 0) + 1; }); });
-    prods.forEach(p => { p.weeks = p.weekSet ? p.weekSet.size : 0; });
+    docs.filter(d => d.purpose !== "Επιστροφή" && d.date).forEach(d => { const w = weekOf(d.date), seen = new Set(); lines(d).forEach(l => { if (!key(l.product) && !l.code) return; const k = lineKey(l), p = prodMap.get(k); if (!p) return; (p.wq = p.wq || new Map()).set(w, (p.wq.get(w) || 0) + (num(l.qty) ?? 0)); if (seen.has(k)) return; seen.add(k); p.orders = (p.orders || 0) + 1; }); });
+    prods.forEach(p => { p.weeks = p.wq ? p.wq.size : 0; });
     return {prods, totQ: prods.reduce((n,p)=>n+p.qty,0), totV: prods.reduce((n,p)=>n+p.value,0)};
   }
   // Monday of the date's week (YYYY-MM-DD).
   const weekOf = s => { const d = new Date(String(s).slice(0,10) + "T00:00"); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return ymd(d); };
+  // ABC (Pareto on pieces: A up to 80% of the period's pieces, B to 95%, C the rest) and XYZ (coefficient of variation of weekly pieces, zero weeks included: X < 0,5, Y ≤ 1, Z > 1; needs ≥ 4 weeks).
+  function abcXyz(prods, W){
+    const tq = prods.reduce((n,p) => n + Math.max(p.qty, 0), 0), m = new Map(); let cum = 0;
+    prods.slice().sort((a,b) => b.qty - a.qty || b.value - a.value).forEach(p => {
+      const abc = cum < 0.8 * tq ? "A" : cum < 0.95 * tq ? "B" : "C"; cum += Math.max(p.qty, 0);
+      const mean = p.qty / W, vals = p.wq ? [...p.wq.values()] : [];
+      const cv = W >= 4 && mean > 0 ? Math.sqrt((vals.reduce((a,v) => a + (v - mean) ** 2, 0) + (W - vals.length) * mean ** 2) / W) / mean : null;
+      const xyz = cv == null ? "" : cv < 0.5 ? "X" : cv <= 1 ? "Y" : "Z";
+      m.set(p.k, {abc, xyz, cv, cls: abc + xyz});
+    });
+    return m;
+  }
+  const CANDIDATES = "Υποψήφια (AX, AY, BX)";
   function periodWeeks(){
     const r = rangeOf(anaPeriod) || ["0000-01-01", "9999-12-31"], ds = anaAllDocs.map(d => String(d.date || "").slice(0,10)).filter(Boolean).sort(), today = ymd(new Date());
     const a = [r[0], ds[0] || today].sort()[1], b = [r[1], today].sort()[0];
@@ -779,15 +792,16 @@ select.reason{font-size:.82rem;padding:4px 6px}
       body = tbl([["Αποστολή"],["Παραγγελίες","r"],["% παραγγελιών","r"],["Πελάτες","r"],["Προορισμοί"]], [...m.entries()].sort((a,b)=>b[1].n-a[1].n).map(([k,x]) => `<tr><td>${esc(k)}</td><td class="r num">${x.n}${cmpTrend(x.n, P(k).n, k + "n")}</td><td class="r num">${pct(x.n,sales.length)}${cmpTrend(sales.length ? x.n / sales.length : 0, pn ? P(k).n / pn : 0, k + "p")}</td><td class="r num">${x.cust.size}${cmpTrend(x.cust.size, P(k).cust.size, k + "c")}</td><td>${esc([...x.cities].join(", "))}</td></tr>`));
     } else if (anaTab === "prod") {
       // Same faceted filters as the catalog: each list offers only values present among the other filters' matches.
-      const rows = prods.map(p => { const cp = p.k.startsWith("id:") ? catalog.find(x => x._id === p.k.slice(3)) : null; return Object.assign({p}, prodCols(cp || {description: p.name}, p.cat)); });
-      const val = (r, f) => f === "feat" ? r.extras : [f === "shape" ? r.shapeF : f === "paint" ? r.paintF : r[f]];
+      const W = periodWeeks(), ax = abcXyz(prods, W);
+      const rows = prods.map(p => { const cp = p.k.startsWith("id:") ? catalog.find(x => x._id === p.k.slice(3)) : null; return Object.assign({p, ax: ax.get(p.k)}, prodCols(cp || {description: p.name}, p.cat)); });
+      const val = (r, f) => f === "abc" ? [r.ax.cls].concat(["AX","AY","BX"].includes(r.ax.cls) ? [CANDIDATES] : []) : f === "feat" ? r.extras : [f === "shape" ? r.shapeF : f === "paint" ? r.paintF : r[f]];
       const ok = (r, skip) => Object.keys(af).every(f => f === skip || af[f] === "all" || val(r, f).includes(af[f]));
       const aopt = f => { const c = countBy(rows.filter(r => ok(r, f)).flatMap(r => val(r, f)), v => v).sort((x,y) => x[0].localeCompare(y[0], "el")); if (af[f] !== "all" && !c.some(([v]) => v === af[f])) c.push([af[f], 0]); return c.map(([v,n]) => `<option value="${esc(v)}" ${af[f]===v?"selected":""}>${esc(v)} (${n})</option>`).join(""); };
       const asel = (id, f, label, all) => `<label for="${id}">${label}</label><select id="${id}"><option value="all">${all}</option>${aopt(f)}</select>`;
       const prevA = atPrev(analysisData), pm = new Map(((prevA && prevA.prods) || []).map(x => [x.k, x])), pTot = prevA ? prevA.totV : 0;
       const T = (r, f, cur) => cmpTrend(cur, f(pm.get(r.p.k) || {list:[], qty:0, value:0}), r.p.k + f);
-      const W = periodWeeks(), list = rows.filter(r => ok(r)).sort((a,b) => b.p.value - a.p.value), lq = list.reduce((n,r) => n + r.p.qty, 0), lv = list.reduce((n,r) => n + r.p.value, 0);
-      body = `<div class="periodbar filters">${asel("aCat","cat","Κατηγορία","Όλες")}${asel("aShape","shape","Σχήμα","Όλα")}${asel("aMat","mat","Υλικό","Όλα")}${asel("aFeat","feat","Ιδιαιτερότητα","Όλες")}${asel("aPaint","paint","Βαφή","Όλα")}${Object.values(af).some(v => v !== "all") ? `<button type="button" id="aClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα · ${qn(lq)} τεμ. · ${eur(r2(lv))}</span></div><p class="hint">Πάτα ένα προϊόν για να δεις ποιοι πελάτες το παίρνουν και σε τι τιμή. «Τακτική ζήτηση»: σε πόσες από τις ${W} εβδομάδες της περιόδου ζητήθηκε· με ταξινόμηση σε αυτή τη στήλη, στις ισοβαθμίες μετράνε μετά τα τεμάχια και τελευταία η αξία.</p>` + tbl([["Κατηγορία"],["Κωδικός"],["Προϊόν"],["Σχήμα"],["Υλικό"],["Βαφή"],["Πελάτες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["Τακτική ζήτηση","r"],["% πωλήσεων","r"]], list.map(r => `<tr data-prodcust="${esc(r.p.k)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.p.code)}</td><td>${esc(r.desc || r.p.name)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td>${esc(r.paint)}</td><td class="r num">${r.p.list.length}${T(r, y => y.list.length, r.p.list.length)}</td><td class="r num">${qn(r.p.qty)}${T(r, y => y.qty, r.p.qty)}</td><td class="r num">${eur(r2(r.p.value))}${T(r, y => y.value, r.p.value)}</td><td class="r num" data-v="${r.p.weeks},${r.p.qty},${r2(r.p.value)}" title="${r.p.orders || 0} παραγγελίες σε ${r.p.weeks} εβδομάδες">${r.p.weeks} από ${W} εβδ.${T(r, y => y.weeks || 0, r.p.weeks)}</td><td class="r num">${pct(r.p.value,totV)}${T(r, y => pTot ? y.value / pTot : 0, totV ? r.p.value / totV : 0)}</td></tr>`));
+      const list = rows.filter(r => ok(r)).sort((a,b) => b.p.value - a.p.value), lq = list.reduce((n,r) => n + r.p.qty, 0), lv = list.reduce((n,r) => n + r.p.value, 0);
+      body = `<div class="periodbar filters">${asel("aCat","cat","Κατηγορία","Όλες")}${asel("aShape","shape","Σχήμα","Όλα")}${asel("aMat","mat","Υλικό","Όλα")}${asel("aFeat","feat","Ιδιαιτερότητα","Όλες")}${asel("aPaint","paint","Βαφή","Όλα")}${asel("aAbc","abc","ABC–XYZ","Όλα")}${Object.values(af).some(v => v !== "all") ? `<button type="button" id="aClear">Καθαρισμός</button>` : ""}<span class="hint">${list.length} προϊόντα · ${qn(lq)} τεμ. · ${eur(r2(lv))}</span></div><p class="hint">Πάτα ένα προϊόν για να δεις ποιοι πελάτες το παίρνουν και σε τι τιμή. <b>ABC</b>: A = τα λίγα προϊόντα που μαζί κάνουν το 80% των τεμαχίων της περιόδου, B έως το 95%, C τα υπόλοιπα. <b>XYZ</b>: πόσο σταθερή είναι η ζήτηση εβδομάδα με εβδομάδα (X σταθερή, Y κυμαινόμενη, Z περιστασιακή)${W < 4 ? `· θέλει τουλάχιστον 4 εβδομάδες στην περίοδο (τώρα ${W})` : ` σε ${W} εβδομάδες`}. Αξίζουν για παραγωγή τα AX, AY, BX.</p>` + tbl([["Κατηγορία"],["Κωδικός"],["Προϊόν"],["Σχήμα"],["Υλικό"],["Βαφή"],["Πελάτες","r"],["Τεμάχια","r"],["Καθαρή αξία","r"],["ABC","r"],["XYZ","r"],["% πωλήσεων","r"]], list.map(r => `<tr data-prodcust="${esc(r.p.k)}"><td>${esc(r.cat)}</td><td class="num">${esc(r.p.code)}</td><td>${esc(r.desc || r.p.name)}</td><td>${esc(r.shape)}</td><td>${esc(r.mat)}</td><td>${esc(r.paint)}</td><td class="r num">${r.p.list.length}${T(r, y => y.list.length, r.p.list.length)}</td><td class="r num">${qn(r.p.qty)}${T(r, y => y.qty, r.p.qty)}</td><td class="r num">${eur(r2(r.p.value))}${T(r, y => y.value, r.p.value)}</td><td class="r" data-v="${r.p.qty},${r2(r.p.value)}">${r.ax.abc}</td><td class="r" data-v="${r.ax.cv == null ? -99 : -r.ax.cv},${r.p.qty}" title="${r.p.orders || 0} παραγγελίες σε ${r.p.weeks} από ${W} εβδομάδες${r.ax.cv == null ? "" : " · συντελεστής μεταβλητότητας " + qn(Math.round(r.ax.cv * 100) / 100)}">${r.ax.xyz || "–"}</td><td class="r num">${pct(r.p.value,totV)}${T(r, y => pTot ? y.value / pTot : 0, totV ? r.p.value / totV : 0)}</td></tr>`));
     } else {
       body = `<p class="hint">Γραμμές όπου η τιμή πριν από την έκπτωση διαφέρει από τον κατάλογο, ή η έκπτωση διαφέρει από τη συνηθισμένη του πελάτη.</p>` + tbl([["Ημερομηνία"],["Πελάτης"],["Προϊόν"],["Τιμή τιμολογίου","r"],["Τιμή καταλόγου","r"],["Έκπτωση","r"],["Συνήθης έκπτωση","r"],["Τι διαφέρει"],["Αιτία"]], deviations().map(x => `<tr><td class="num">${dt(x.d.date)}</td><td>${shortCell(x.c || {})}</td><td>${esc(lineName(x.l))}</td><td class="r num">${eur(x.price)}</td><td class="r num">${x.list != null ? eur(x.list) : "–"}</td><td class="r num">${x.disc ? qn(x.disc) + "%" : "–"}</td><td class="r num">${x.usual ? qn(x.usual) + "%" : "–"}</td><td>${x.diffs.map(d => `<span class="${d.up ? "devup" : "devdown"}">${esc(d.t)}</span>`).join("<br>")}</td><td><select class="reason" data-note="${esc(x.noteId)}" aria-label="Αιτία">${REASONS.map(r => `<option ${noteFor(x.noteId).reason===r?"selected":""} value="${esc(r)}">${r||"—"}</option>`).join("")}</select></td></tr>`));
     }

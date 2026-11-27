@@ -1,14 +1,14 @@
-// Demand stability (XYZ) for Analysis → Products, measured in calendar units: week (Mon–Sun), half-month (1–15, 16–end), month or quarter.
+// Demand stability (XYZ) for Analysis → Products, measured in calendar units: week (Mon–Sun), half-month (1–15, 16–end) or month.
+// The unit is chosen automatically from the selected period: month if it has ≥ 4 whole months, else half-month, else week (auto()).
 // XYZ = coefficient of variation of the pieces per unit, empty units included (X < 0,5 steady, Y ≤ 1 fluctuating, Z > 1 occasional).
 // Only whole units count: fully inside the period, after recording began, and already closed. At least 4 are needed for a grade.
 // Exception for weeks only: the week recording began counts as whole (a few missing days), as the original weekly XYZ did.
 // Frequency = in how many of the units touching the period (partial and current ones included) the product was ordered.
 (function(){
   const UNITS = {
-    W: {label: "Εβδομάδα", many: "εβδομάδες", whole: "ολόκληρες εβδομάδες", the: "τις", step: "από εβδομάδα σε εβδομάδα", next: "Η επόμενη εβδομάδα"},
-    H: {label: "Δεκαπενθήμερο", many: "δεκαπενθήμερα", whole: "ολόκληρα δεκαπενθήμερα", the: "τα", step: "από δεκαπενθήμερο σε δεκαπενθήμερο", next: "Το επόμενο δεκαπενθήμερο"},
-    M: {label: "Μήνας", many: "μήνες", whole: "ολόκληρους μήνες", the: "τους", step: "από μήνα σε μήνα", next: "Ο επόμενος μήνας"},
-    Q: {label: "Τρίμηνο", many: "τρίμηνα", whole: "ολόκληρα τρίμηνα", the: "τα", step: "από τρίμηνο σε τρίμηνο", next: "Το επόμενο τρίμηνο"}
+    W: {label: "Εβδομάδα", many: "εβδομάδες", whole: "ολόκληρες εβδομάδες", the: "τις", by: "ανά εβδομάδα", step: "από εβδομάδα σε εβδομάδα", next: "Η επόμενη εβδομάδα"},
+    H: {label: "Δεκαπενθήμερο", many: "δεκαπενθήμερα", whole: "ολόκληρα δεκαπενθήμερα", the: "τα", by: "ανά δεκαπενθήμερο", step: "από δεκαπενθήμερο σε δεκαπενθήμερο", next: "Το επόμενο δεκαπενθήμερο"},
+    M: {label: "Μήνας", many: "μήνες", whole: "ολόκληρους μήνες", the: "τους", by: "ανά μήνα", step: "από μήνα σε μήνα", next: "Ο επόμενος μήνας"}
   };
   const MIN = 4;
   const pad = n => String(n).padStart(2, "0");
@@ -20,7 +20,6 @@
     const [y, m, d] = parts(s);
     if (u === "W") { const wd = (new Date(y, m, d).getDay() + 6) % 7; return [ymd(y, m, d - wd), ymd(y, m, d - wd + 6)]; }
     if (u === "H") return d <= 15 ? [ymd(y, m, 1), ymd(y, m, 15)] : [ymd(y, m, 16), ymd(y, m + 1, 0)];
-    if (u === "Q") { const q = m - m % 3; return [ymd(y, q, 1), ymd(y, q + 3, 0)]; }
     return [ymd(y, m, 1), ymd(y, m + 1, 0)];
   }
   const after = (b, u) => { const [y, m, d] = parts(b[1]); return unitOf(ymd(y, m, d + 1), u); };
@@ -51,6 +50,11 @@
     return {map, n, total: all.length, whole, next: pending && pending.to <= range[1] ? pending.to : ""};
   }
 
+  // Coarsest unit (month, half-month, week) with at least MIN whole units in the period; week when none reaches it (grade then empty).
+  function auto(prods, range, first, today){
+    for (const u of ["M", "H", "W"]) { const r = classify(prods, u, range, first, today); r.unit = u; if (r.n >= MIN || u === "W") return r; }
+  }
+
   // Reliability of the grade from the number of whole units.
   function reliability(n){
     if (n < MIN) return {level: "", cls: "none"};
@@ -59,13 +63,13 @@
     return {level: "Υψηλή", cls: "high"};
   }
 
-  // One-line explanation above the table. dt formats YYYY-MM-DD for display; narrow = a period shorter than "all" is selected.
-  function hint(res, u, dt, narrow){
-    const U = UNITS[u], r = reliability(res.n), nx = res.next ? ` ${U.next} κλείνει στις ${dt(res.next)}.` : "";
+  // One-line explanation above the table. dt formats YYYY-MM-DD for display.
+  function hint(res, dt){
+    const U = UNITS[res.unit], r = reliability(res.n), nx = res.next ? ` ${U.next} κλείνει στις ${dt(res.next)}.` : "";
     const span = res.n ? ` (${dt(res.whole[0].from)} – ${dt(res.whole[res.n - 1].to)})` : "";
-    if (!r.level) return `<b>Αξιοπιστία XYZ:</b> <span class="rel none">δεν βγαίνει ακόμα βαθμός</span> · υπάρχουν ${res.n} από ${U.the} ${MIN} ${U.whole} που χρειάζονται${span}.${narrow ? " Για περισσότερες, διάλεξε «Όλη η περίοδος» στην Περίοδο." : ""}${nx}`;
-    return `<b>Αξιοπιστία XYZ:</b> <span class="rel ${r.cls}">${r.level}</span> · σε ${res.n} ${U.whole}${span} (χαμηλή 4–5, μέτρια 6–11, υψηλή από 12).${nx}`;
+    if (!r.level) return `<b>Σταθερότητα (XYZ):</b> <span class="rel none">δεν βγαίνει βαθμός</span> · η περίοδος είναι πολύ μικρή: έχει ${res.n} ${U.whole}, χρειάζονται τουλάχιστον ${MIN}. Διάλεξε μεγαλύτερη περίοδο, π.χ. «Όλη η περίοδος».${nx}`;
+    return `<b>Σταθερότητα (XYZ):</b> μετρήθηκε ${U.by} σε ${res.n} ${U.whole}${span} · αξιοπιστία <span class="rel ${r.cls}">${r.level}</span> (χαμηλή 4–5, μέτρια 6–11, υψηλή από 12).${res.unit === "M" ? "" : " Η μονάδα μεγαλώνει μόνη της όσο μαζεύονται δεδομένα: δεκαπενθήμερο με 4 ολόκληρα, μήνας με 4 ολόκληρους."}${nx}`;
   }
 
-  window.Stability = {UNITS, classify, reliability, hint};
+  window.Stability = {UNITS, classify, auto, reliability, hint};
 })();

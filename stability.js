@@ -1,9 +1,11 @@
-// Demand stability (XYZ) for Analysis → Products, measured in calendar units: half-month (1–15, 16–end), month or quarter.
+// Demand stability (XYZ) for Analysis → Products, measured in calendar units: week (Mon–Sun), half-month (1–15, 16–end), month or quarter.
 // XYZ = coefficient of variation of the pieces per unit, empty units included (X < 0,5 steady, Y ≤ 1 fluctuating, Z > 1 occasional).
 // Only whole units count: fully inside the period, after recording began, and already closed. At least 4 are needed for a grade.
+// Exception for weeks only: the week recording began counts as whole (a few missing days), as the original weekly XYZ did.
 // Frequency = in how many of the units touching the period (partial and current ones included) the product was ordered.
 (function(){
   const UNITS = {
+    W: {label: "Εβδομάδα", many: "εβδομάδες", whole: "ολόκληρες εβδομάδες", the: "τις", step: "από εβδομάδα σε εβδομάδα", next: "Η επόμενη εβδομάδα"},
     H: {label: "Δεκαπενθήμερο", many: "δεκαπενθήμερα", whole: "ολόκληρα δεκαπενθήμερα", the: "τα", step: "από δεκαπενθήμερο σε δεκαπενθήμερο", next: "Το επόμενο δεκαπενθήμερο"},
     M: {label: "Μήνας", many: "μήνες", whole: "ολόκληρους μήνες", the: "τους", step: "από μήνα σε μήνα", next: "Ο επόμενος μήνας"},
     Q: {label: "Τρίμηνο", many: "τρίμηνα", whole: "ολόκληρα τρίμηνα", the: "τα", step: "από τρίμηνο σε τρίμηνο", next: "Το επόμενο τρίμηνο"}
@@ -16,17 +18,18 @@
   // [start, end] (inclusive, YYYY-MM-DD) of the unit that contains date s.
   function unitOf(s, u){
     const [y, m, d] = parts(s);
+    if (u === "W") { const wd = (new Date(y, m, d).getDay() + 6) % 7; return [ymd(y, m, d - wd), ymd(y, m, d - wd + 6)]; }
     if (u === "H") return d <= 15 ? [ymd(y, m, 1), ymd(y, m, 15)] : [ymd(y, m, 16), ymd(y, m + 1, 0)];
     if (u === "Q") { const q = m - m % 3; return [ymd(y, q, 1), ymd(y, q + 3, 0)]; }
     return [ymd(y, m, 1), ymd(y, m + 1, 0)];
   }
   const after = (b, u) => { const [y, m, d] = parts(b[1]); return unitOf(ymd(y, m, d + 1), u); };
 
-  // Units overlapping [from, to]; "whole" when the unit lies fully inside [from, to] and ended before today.
-  function units(u, from, to, today){
+  // Units overlapping [from, to]; "whole" when the unit starts at or after lo (normally = from), ends by to and ended before today.
+  function units(u, from, to, today, lo){
     const out = [];
     if (!from || !to || to < from) return out;
-    for (let b = unitOf(from, u); b[0] <= to; b = after(b, u)) out.push({from: b[0], to: b[1], whole: b[0] >= from && b[1] <= to && b[1] < today});
+    for (let b = unitOf(from, u); b[0] <= to; b = after(b, u)) out.push({from: b[0], to: b[1], whole: b[0] >= lo && b[1] <= to && b[1] < today});
     return out;
   }
 
@@ -34,7 +37,8 @@
   // first: date recording began (earliest document). today: YYYY-MM-DD.
   function classify(prods, u, range, first, today){
     const from = [range[0], first || today].sort()[1], to = [range[1], today].sort()[0];
-    const all = units(u, from, to, today), whole = all.filter(b => b.whole), n = whole.length;
+    const lo = u === "W" && first && range[0] <= first ? unitOf(first, u)[0] : from;
+    const all = units(u, from, to, today, lo), whole = all.filter(b => b.whole), n = whole.length;
     const map = new Map();
     prods.forEach(p => {
       const sum = b => { let q = 0; if (p.dq) p.dq.forEach((v, d) => { if (d >= b.from && d <= b.to) q += v; }); return q; };

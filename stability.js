@@ -59,11 +59,11 @@
     return {level: "Υψηλή", cls: "high"};
   }
 
-  // One-line explanation above the table. dt formats YYYY-MM-DD for display.
-  function hint(res, u, dt){
+  // One-line explanation above the table. dt formats YYYY-MM-DD for display; narrow = a period shorter than "all" is selected.
+  function hint(res, u, dt, narrow){
     const U = UNITS[u], r = reliability(res.n), nx = res.next ? ` ${U.next} κλείνει στις ${dt(res.next)}.` : "";
     const span = res.n ? ` (${dt(res.whole[0].from)} – ${dt(res.whole[res.n - 1].to)})` : "";
-    if (!r.level) return `<b>Αξιοπιστία XYZ:</b> <span class="rel none">δεν βγαίνει ακόμα βαθμός</span> · υπάρχουν ${res.n} από ${U.the} ${MIN} ${U.whole} που χρειάζονται${span}.${nx}`;
+    if (!r.level) return `<b>Αξιοπιστία XYZ:</b> <span class="rel none">δεν βγαίνει ακόμα βαθμός</span> · υπάρχουν ${res.n} από ${U.the} ${MIN} ${U.whole} που χρειάζονται${span}.${narrow ? " Για περισσότερες, διάλεξε «Όλη η περίοδος» στην Περίοδο." : ""}${nx}`;
     return `<b>Αξιοπιστία XYZ:</b> <span class="rel ${r.cls}">${r.level}</span> · σε ${res.n} ${U.whole}${span} (χαμηλή 4–5, μέτρια 6–11, υψηλή από 12).${nx}`;
   }
 
